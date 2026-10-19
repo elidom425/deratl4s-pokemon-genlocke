@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Genlocke Challenge</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{background:#050507;color:#e5e7eb;font-family:'Space Grotesk',system-ui,sans-serif;
+background-image:radial-gradient(60% 40% at 15% 0%,rgba(139,92,246,.18),transparent),radial-gradient(50% 40% at 90% 10%,rgba(217,70,239,.12),transparent)}
+.card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:16px;backdrop-filter:blur(6px);transition:.2s}
+.card:hover{border-color:rgba(167,139,250,.6);box-shadow:0 0 24px rgba(139,92,246,.2)}
+.ace{color:#e879f9;text-shadow:0 0 10px rgba(217,70,239,.8);font-weight:700}
+</style></head>
+<body><div id="root"></div>
+<script>
+const h=React.createElement,{useState}=React;
+// ===== CLOUD-KONFIGURATION (JSONBin.io) =====
+const BIN_ID="6ac66905ac6210605a1cd1a4";
+const API_KEY="";   // Schreib-Key. Bewusst leer: wird im Admin-Login eingegeben (siehe Hinweis). Nie in eine öffentliche Seite schreiben!
+const READ_KEY="";  // Optional: Access-Key mit NUR Lese-Recht, falls der Bin privat ist
+const ADMIN_PASSWORD="admin123";
+const ADMIN_URL=new URLSearchParams(location.search).get("admin")=="true";
+const isAdmin=()=>{try{return ADMIN_URL&&sessionStorage.getItem("gl_auth")=="1"}catch(e){return false}};
+const R=[
+["📦","Der Champ entscheidet","Eine Generation gilt als bestanden, sobald der erste Champ besiegt wurde. Das Team, das den Champ besiegt, wird für alle folgenden Generationen gesperrt."],
+["💀","Das Genlocke-Prinzip & Wipe","Gespielt wird von Region 1 bis 7. Stirbt ein Pokémon, ist es für ALLE folgenden Editionen gesperrt. Bei einem Wipe (Whiteout) verliert man den gesamten Run, startet wieder bei Gen 1 (Feuerrot) und alles wird resettet."],
+["🎲","Begegnungen (Encounter)","Der Run beginnt offiziell erst nach Erhalt der Pokébälle. Es wird mit einem Randomizer gespielt. Pro Route darf nur der erste Encounter gefangen werden (Shiny Clause aktiv: Shinies dürfen zusätzlich gefangen werden)."],
+["📊","Zwei Zahlen, zwei Grenzen (Level-Caps)","Die Level-Caps richten sich nach den Bossen. Alle eigenen Pokémon müssen auf oder unter dem Standard-Cap sein. Genau EIN eigenes Pokémon darf auf dem höheren Ace-Cap stehen (dem Level des gegnerischen Signatur-Pokémon). Gemessen wird VOR dem Kampf."],
+["⚖️","Team- & Kampf-Limits","Maximal ein Pokémon mit einer Basiswert-Summe (BST) von 600+ im aktiven Team. Im Arenakampf darf man nicht mehr Pokémon nutzen als der Leiter besitzt. Alle Bosstrainer (Rivalen, Team-Bosse) haben fiktiv +2 Pokémon im Team."],
+["🧬","Entwicklungen & Items","Ab dem Level-Cap von Arena 6 müssen alle Pokémon per Forced-Evo voll entwickelt sein (Level 40, außer bei SoulSilver: Level 35). TMs folgen dem jeweiligen Spiel. Special Shop Items (wie Überreste) und Fossilien dürfen im gesamten Run jeweils nur EINMAL verwendet/gekauft werden."],
+["🔁","Der 25%-Revive (Wiederbelebung)","Nach jeder erfolgreich bestandenen Generation dürfen 25% der gestorbenen Pokémon aus der Todesliste (immer abgerundet!) zufällig wiederbelebt und in die nächste Gen mitgenommen werden. Beispiel: Bei 5 toten Pokémon wird 1 zufällig wiederbelebt."]];
+// Gruppen: g=Arena/Boss, t=Top Vier, c=Champ, k=Prüfung. Zeile: Name,Team,Cap,Ace
+const G=[
+["Feuerrot",40,"Kanto","g:Rocko,2,12,14;Misty,2,18,21;Major Bob,3,21,24;Erika,3,27,29;Koga,4,40,43;Sabrina,4,40,43;Pyro,4,44,47;Giovanni,5,46,50|t:Lorelei,5,52,54;Bruno,5,54,56;Agathe,5,56,58;Siegfried,5,57,60|c:Champ,6,60,63"],
+["SoulSilver",35,"Johto","g:Falk,2,9,13;Kai,3,15,17;Bianka,2,17,19;Jens,4,22,25;Hartwig,2,29,31;Jasmin,3,30,35;Norbert,3,31,34;Sandra,4,38,41|t:Willi,5,41,42;Koga,5,42,44;Bruno,5,42,46;Melanie,5,44,47|c:Siegfried,6,48,50"],
+["Smaragd",40,"Hoenn","g:Felizia,3,12,15;Kamillo,3,16,19;Walter,4,20,24;Flavia,4,24,29;Norman,4,27,31;Wibke,5,29,33;Ben u. Svenja,4,41,42;Juan,5,41,46|t:Ulrich,5,46,49;Antonia,5,48,51;Frosina,5,50,53;Dragan,5,52,55|c:Champ,6,55,58;Wahrer Champ,6,75,78"],
+["Platin",40,"Sinnoh","g:Veit,3,12,14;Silvana,3,20,22;Lamina,3,24,26;Hilda,3,28,32;Marinus,3,33,37;Adam,3,37,41;Frida,4,40,44;Volkner,4,46,50|t:Herbaro,5,49,53;Teresa,5,50,55;Ignaz,5,52,57;Lucian,5,53,59|c:Cynthia,6,58,62"],
+["Schwarz/Weiß 2",40,"Einall","g:Cheren,2,11,13;Mica,2,16,18;Artie,3,22,24;Kamilla,3,28,30;Turner,3,31,33;Géraldine,3,37,39;Lysander,3,46,48;Benson,3,49,51|t:Anissa,4,56,58;Astor,4,56,58;Kattlea,4,56,58;Eugen,4,56,58|c:Champ Lilia,6,57,59"],
+["X/Y",40,"Kalos","g:Viola,2,10,12;Lino,2,25,25;Connie,3,28,32;Amaro,3,30,34;Citro,3,35,37;Valerie,3,38,42;Astrid,3,44,48;Galantho,3,55,59|t:Thymelot,4,63,65;Pachira,4,63,65;Dracena,4,63,65;Narcisse,4,63,65|c:Diantha,6,64,68"],
+["Ultrasonne/Ultramond",40,"Alola","k:Hala,3,15,16;Mayla,3,27,28;Yasu,3,52,53;Hapu'u,4,53,54;Marlon,5,56,57;Mayla,5,56,57;Lola,5,56,57;Kahili,5,56,57|c:Tali,6,58,60"]
+].map(([name,fe,reg,s])=>{let n=0;return{name,fe,reg,rows:s.split("|").flatMap(g=>{const t=g[0];return g.slice(2).split(";").map(r=>{const[a,b,c,d]=r.split(",");return{nr:String(++n).padStart(2,"0"),t,name:a,team:b,cap:c,ace:d}})})}});
+const EL={Rocko:"🪨",Misty:"💧","Major Bob":"⚡",Erika:"🌿",Koga:"🦹",Sabrina:"🔮",Pyro:"🔥",Giovanni:"🏜️"};
+const icon=r=>r.t=="t"?"⚔️":r.t=="c"?"👑":EL[r.name]||(r.t=="k"?"🌺":"🏅");
+// Showdown-Trainer-Dateinamen pro Gen, in Tabellenreihenfolge (Gen 1-7)
+const TS=[
+["brock","misty","ltsurge","erika","koga","sabrina","blaine","giovanni","lorelei-gen3","bruno","agatha-gen3","lance","blue"],
+["falkner","bugsy","whitney","morty","chuck","jasmine","pryce","clair","will","koga","bruno","karen","lance"],
+["roxanne","brawly","wattson","flannery","norman","winona","tateandliza-gen3","juan","sidney","phoebe-gen3","glacia","drake-gen3","wallace","steven"],
+["roark","gardenia","fantina","maylene","crasherwake","byron","candice","volkner","aaron","bertha","flint","lucian","cynthia"],
+["cheren","roxie","burgh","elesa","clay","skyla","brycen","drayden","shauntal","grimsley","caitlin","marshal","iris"],
+["viola","grant","korrina","ramos","clemont","valerie","olympia","wulfric","wikstrom","malva","drasna","siebold","diantha"],
+["hala","olivia","nanu","hapu","molayne","olivia","acerola","kahili","kukui"]];
+function TImg({f,e}){const[bad,setBad]=useState(false);React.useEffect(()=>{setBad(false)},[f]);
+ return f&&!bad?h("img",{src:"https://play.pokemonshowdown.com/sprites/trainers/"+f+".png",alt:f,loading:"lazy",onError:()=>setBad(true),className:"shrink-0 object-contain",style:{width:64,height:64}}):h("span",{className:"shrink-0 grid place-items-center text-4xl",style:{width:64,height:64}},e)}
+const TABS=["Regeln & Roadmap","Aktueller Stand","Todesliste","Glücksrad","Encounter-Datenbank","Vergangene Runs"];
+
+function Modal({g,i,close}){
+ return h("div",{className:"fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start sm:items-center justify-center p-3",onClick:close},
+  h("div",{className:"card w-full max-w-3xl max-h-[92%] overflow-auto bg-[#0b0b10]",style:{background:"#0b0b10"},onClick:e=>e.stopPropagation()},
+   h("div",{className:"sticky top-0 flex items-center justify-between gap-3 p-4 border-b border-white/10",style:{background:"#0b0b10"}},
+    h("div",null,h("div",{className:"text-xs tracking-widest text-violet-400"},"GEN "+String(i+1).padStart(2,"0")),
+     h("div",{className:"text-xl font-bold"},g.name),h("div",{className:"text-xs text-gray-400"},"Forced Evo "+g.fe)),
+    h("button",{onClick:close,className:"px-4 py-2 rounded-lg text-sm font-bold tracking-widest text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 shadow-[0_0_18px_rgba(217,70,239,.6)]"},"SCHLIESSEN")),
+   h("table",{className:"w-full text-sm"},
+    h("thead",null,h("tr",{className:"text-left text-xs tracking-widest text-gray-500"},["NR.","TRAINER","TEAM","CAP","ACE"].map(c=>h("th",{key:c,className:"p-3"},c)))),
+    h("tbody",null,g.rows.map((r,k)=>h("tr",{key:r.nr,className:"border-t border-white/5 hover:bg-white/5"},
+     h("td",{className:"p-3 text-gray-500"},r.nr),
+     h("td",{className:"p-3"},h("div",{className:"flex items-center gap-3"},h(TImg,{f:(TS[i]||[])[k],e:icon(r)}),h("span",{className:"font-bold"},r.name))),
+     h("td",{className:"p-3 text-gray-400"},r.team),
+     h("td",{className:"p-3 text-white font-bold"},r.cap),
+     h("td",{className:"p-3 ace"},r.ace)))))))}
+
+function Wheel({items,ctl,onResult,hideBtn,pics}){
+ const[rot,setRot]=useState(0),[busy,setBusy]=useState(false),[badImg,setBadImg]=useState({});
+ const n=items.length,seg=360/Math.max(n,1),c=200,r=190;
+ const spin=()=>{if(busy||!n)return;const w=Math.floor(Math.random()*n);
+  const target=-((w+.2+Math.random()*.6)*seg),cur=((rot%360)+360)%360,d=(((target-cur)%360)+360)%360;
+  setRot(rot+1800+d);setBusy(true);
+  setTimeout(()=>{setBusy(false);onResult&&onResult(items[w],w)},3100)};
+ if(ctl)ctl.current=spin;
+ const P=a=>[c+r*Math.sin(a*Math.PI/180),c-r*Math.cos(a*Math.PI/180)];
+ const fs=n>12?13:n>8?15:18;
+ const segs=n==1?[h("circle",{key:0,cx:c,cy:c,r,fill:"hsl(265,70%,30%)"})]:items.map((t,i)=>{
+  const[x0,y0]=P(i*seg),[x1,y1]=P((i+1)*seg),mid=(i+.5)*seg,pid0=pics?spriteId(t):null,pid=pid0&&!badImg[t]?pid0:null,sz2=n>12?44:n>8?56:72,ix=c+r*.66*Math.sin(mid*Math.PI/180),iy=c-r*.66*Math.cos(mid*Math.PI/180);
+  return h("g",{key:i},
+   h("path",{d:`M${c} ${c}L${x0} ${y0}A${r} ${r} 0 0 1 ${x1} ${y1}Z`,fill:`hsl(${[265,225,300,250,285][i%5]},70%,${i%2?20:32}%)`,stroke:"rgba(255,255,255,.25)",strokeWidth:1.5}),
+   pid&&h("image",{href:"https://play.pokemonshowdown.com/sprites/dex/"+pid+".png",x:ix-sz2/2,y:iy-sz2/2,width:sz2,height:sz2,preserveAspectRatio:"xMidYMid meet",onError:()=>setBadImg(b=>({...b,[t]:1}))}),
+   !pid&&h("text",{transform:`rotate(${mid-90} ${c} ${c})`,x:c+r-12,y:c+5,textAnchor:"end",fill:"#fff",fontSize:fs,fontWeight:700},pics?(t.length>9?t.slice(0,8)+"…":t):(t.length>15?t.slice(0,14)+"…":t)))});
+ return h("div",{className:"relative mx-auto aspect-square",style:{width:"min(100%,480px)"}},
+  h("svg",{viewBox:"0 0 400 400",className:"w-full h-full drop-shadow-[0_0_25px_rgba(139,92,246,.5)]"},
+   n?h("g",{style:{transform:`rotate(${rot}deg)`,transformOrigin:"200px 200px",transition:busy?"transform 3s cubic-bezier(.12,.6,.1,1)":"none"}},segs):
+    h("circle",{cx:c,cy:c,r,fill:"none",stroke:"rgba(255,255,255,.2)",strokeDasharray:"6 6"}),
+   h("polygon",{points:"186,0 214,0 200,28",fill:"#e879f9"})),
+  !hideBtn&&h("button",{onClick:spin,disabled:busy||!n,className:"absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full font-bold text-white bg-gradient-to-br from-violet-600 to-fuchsia-600 shadow-[0_0_20px_rgba(217,70,239,.7)] disabled:opacity-50"},busy?"…":"Drehen"))}
+
+const Btn=(p)=>h("button",Object.assign({},p,{className:"px-4 py-2 rounded-lg text-sm font-bold border border-violet-500/60 bg-violet-500/10 hover:bg-violet-500/30 disabled:opacity-40 "+(p.className||"")}));
+const Res=({t,pic})=>t?h("div",{className:"card p-6 text-center mt-5"},pic&&h("div",{className:"flex justify-center mb-2"},Av(t,SP*1.5)),h("div",{className:"text-xs tracking-widest text-gray-500 mb-1"},"ERGEBNIS"),h("div",{className:"ace text-3xl sm:text-4xl"},t)):null;
+
+const P0=["Platscher","Gen Reset","Zufalls Tod","Ability Wahl","Wesen Wahl","Chat Starter","Level Cap -1","Arena ohne Items","25 Liegestütze","Team -1","Reroll Token","Reroll","Niete","Niete","Niete"];
+function Phoadsen(){
+ const[it,setIt]=useState(P0),[res,setRes]=useState("");
+ const shuffle=()=>{const a=[...it];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}setIt(a);setRes("")};
+ return h("div",null,h("div",{className:"flex justify-center mb-5"},h(Btn,{onClick:shuffle},"Rad-Einträge mischen 🔀")),
+  h(Wheel,{items:it,onResult:t=>setRes(t)}),h(Res,{t:res}))}
+
+function Platscher(){
+ const[sl,setSl]=useState(Array(6).fill(null)),ctl=React.useRef(null);
+ const next=sl.indexOf(null);
+ const put=v=>setSl(s=>{const i=s.indexOf(null);if(i<0)return s;const n=[...s];n[i]=v;return n});
+ return h("div",{className:"grid gap-8 md:grid-cols-2 items-center"},
+  h("div",null,h(Wheel,{items:["1","2","3","4"],ctl,onResult:put,hideBtn:true}),
+   h("div",{className:"flex gap-2 justify-center mt-5"},
+    h(Btn,{disabled:next<0,onClick:()=>ctl.current&&ctl.current()},next<0?"Alle Slots belegt":"Für Slot "+(next+1)+" drehen"),
+    h(Btn,{onClick:()=>setSl(Array(6).fill(null))},"Reset"))),
+  h("div",{className:"grid gap-2"},sl.map((v,i)=>h("div",{key:i,className:"card px-4 py-3 flex justify-between items-center"},
+   h("span",{className:"text-gray-400"},"Team-Slot "+(i+1)),h("span",{className:v?"ace text-2xl":"text-gray-600"},v||"–")))))}
+
+function pull(alive,sel){
+ let g;try{g=JSON.parse(localStorage.getItem("gl_state"))}catch(e){}
+ if(!g||g.length!=G.length)g=init();
+ const all=[];
+ g.forEach((x,i)=>{
+  if(alive){
+   const dead=new Set([...dl(x),...(x.ch||[]).filter(c=>!c.a).map(c=>c.n)].map(n=>(n||"").trim().toLowerCase()));
+   const add=l=>l.forEach(n=>{if(n&&!dead.has(n.trim().toLowerCase()))all.push(n)});
+   if(sel=="cur"){if(x.s==1){add(x.team);add(bl(x))}}
+   else if(i==+sel){if(x.s==1)add(x.team);if(x.s==2)add(x.ch.filter(c=>c.a).map(c=>c.n));add(bl(x))}}
+  else if(i==+sel){dl(x).forEach(n=>all.push(n));x.ch.filter(c=>!c.a).forEach(c=>all.push(c.n))}});
+ const seen=new Set();
+ return all.map(n=>n.trim()).filter(n=>{const k=n.toLowerCase();if(!n||seen.has(k))return false;seen.add(k);return true})}
+const Sel=({v,on,cur})=>h("select",{value:v,onChange:e=>on(e.target.value),className:"px-3 py-2 rounded-lg text-sm bg-black border border-white/20 min-w-0 flex-1"},
+ (cur?[h("option",{key:"c",value:"cur"},"Aktuelle Gen")]:[]).concat(G.map((g,i)=>h("option",{key:i,value:i},"Gen "+pad(i)+" – "+g.name))));
+function Universal(){
+ const[l,setL]=useState([]),[v,setV]=useState(""),[res,setRes]=useState(""),[msg,setMsg]=useState(""),[sa,setSa]=useState("cur"),[sd,setSd]=useState("0");
+ const imp=(a,sel)=>{const p=pull(a,sel);setL(p);setRes("");const lab=sel=="cur"?"der aktuellen Gen":"Gen "+pad(+sel);setMsg(p.length?p.length+(a?" lebende":" tote")+" Pokémon aus "+lab+" importiert.":"Keine "+(a?"lebenden":"toten")+" Pokémon in "+lab+" gefunden.")};
+ const add=()=>{const t=v.trim();if(t){setL([...l,t]);setV("");setRes("")}};
+ return h("div",{className:"grid gap-8 md:grid-cols-2 items-start"},
+  h("div",null,
+   h("div",{className:"grid sm:grid-cols-2 gap-3 mb-2"},
+    h("div",{className:"rounded-xl border border-green-500/30 bg-green-500/5 p-3 grid gap-2"},Lbl("ZUFALLS-TOD · LEBENDE","text-green-400"),
+     h(Sel,{v:sa,on:setSa,cur:true}),h(Btn,{onClick:()=>imp(true,sa),className:"!border-green-500/60 !bg-green-500/10 hover:!bg-green-500/30"},"Lebende importieren aus... 💚")),
+    h("div",{className:"rounded-xl border border-red-500/30 bg-red-500/5 p-3 grid gap-2"},Lbl("REVIVES · TOTE","text-red-400"),
+     h(Sel,{v:sd,on:setSd}),h(Btn,{onClick:()=>imp(false,sd),className:"!border-red-500/60 !bg-red-500/10 hover:!bg-red-500/30"},"Tote importieren aus... 💀"))),
+   h("p",{className:"text-xs text-gray-500 mb-4 min-h-[1rem]"},msg),
+   h("div",{className:"flex gap-2 mb-4"},
+   h("input",{value:v,onChange:e=>setV(e.target.value),onKeyDown:e=>e.key=="Enter"&&add(),placeholder:"Pokémon-Name…",className:"flex-1 min-w-0 px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
+   h(Btn,{onClick:add},"Hinzufügen")),
+   h("div",{className:"grid gap-2"},l.length?l.map((t,i)=>h("div",{key:i,className:"card px-4 py-2 flex justify-between items-center"},t,
+    h("button",{onClick:()=>{setL(l.filter((_,j)=>j!=i));setRes("")},className:"text-fuchsia-400 hover:text-white px-2","aria-label":"Löschen"},"✕"))):h("p",{className:"text-gray-500 text-sm"},"Noch keine Pokémon in der Liste.")),
+   l.length>0&&h(Btn,{className:"mt-4",onClick:()=>{setL([]);setRes("")}},"Liste leeren")),
+  h("div",null,h(Wheel,{items:l,pics:true,onResult:t=>setRes(t)}),h(Res,{t:res,pic:true})))}
+
+function Wheels(){
+ const[s,setS]=useState(0),T=["Phoadsen Rad","Platscher Rad","Universelles Pokémon Rad"];
+ return h("div",{className:"mt-6"},h("h2",{className:"text-3xl font-bold mb-4"},"Glücksrad"),
+  h("div",{className:"flex gap-2 mb-8 overflow-x-auto"},T.map((t,i)=>h("button",{key:t,onClick:()=>setS(i),className:"px-4 py-2 rounded-lg text-sm whitespace-nowrap border "+(s==i?"border-fuchsia-500 bg-fuchsia-500/20 text-white":"border-white/10 text-gray-400 hover:text-white")},t))),
+  s==0?h(Phoadsen):s==1?h(Platscher):h(Universal))}
+
+const init=()=>G.map((g,i)=>({s:i?0:1,st:"",team:Array(6).fill(""),dt:"",ch:Array.from({length:6},()=>({n:"",a:true})),box:""}));
+const dl=x=>x.dt.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);
+const bl=x=>(x.box||"").split(/[,\n]/).map(t=>t.trim()).filter(Boolean);
+function syncEnc(){try{
+ if(!isAdmin())return;
+ const g=JSON.parse(localStorage.getItem("gl_state"));if(!Array.isArray(g))return;
+ let l=[];try{const v=JSON.parse(localStorage.getItem("gl_enc"));if(Array.isArray(v))l=v.map(x=>typeof x=="string"?{n:x,f:"",g:"",r:false}:{g:"",r:false,...x})}catch(e){}
+ const kk=t=>t.trim().toLowerCase(),n0=l.length,found=[];
+ g.forEach((x,i)=>{[...(x.team||[]),...bl(x),...dl(x),...(x.ch||[]).map(c=>c.n)].map(n=>(n||"").trim()).filter(Boolean).forEach(n=>found.push([n,i]))});
+ const cur=new Set(found.map(([n])=>kk(n)));
+ // Alt-Müll (Tipp-Fragmente) entfernen: unbearbeitete Einträge, die nur Anfang eines anderen Namens sind
+ l=l.filter(e=>e.f||e.r||cur.has(kk(e.n))||!l.some(o=>o!==e&&kk(o.n).length>kk(e.n).length&&kk(o.n).startsWith(kk(e.n))));
+ const seen=new Set(l.map(x=>kk(x.n)));let ch=l.length!=n0;
+ found.forEach(([n,i])=>{const k=kk(n);if(!seen.has(k)){seen.add(k);l.push({n,f:"",g:String(i),r:false});ch=true}});
+ if(ch){localStorage.setItem("gl_enc",JSON.stringify(l));localStorage.setItem("gl_dirty","1")}}catch(e){}}
+const SL=["NOCH OFFEN","LÄUFT GERADE","GESCHAFFT"],pad=i=>String(i+1).padStart(2,"0");
+const SP=80,SPL=148; // SP = Norm-Sprite, SPL = große Kacheln (Team/Champ/Starter) // einheitliche Sprite-Größe (px) für die gesamte App
+const Fb=(n,sz)=>h("div",{className:"shrink-0 rounded-lg grid place-items-center font-bold text-white bg-gradient-to-br from-violet-600/60 to-blue-600/40 border border-white/15",style:{width:sz,height:sz,fontSize:sz/2.2}},(n||"?")[0].toUpperCase());
+// Lokales Wörterbuch Deutsch=Englisch; Einträge ohne "=" haben gleiche Namen. Gen 1-2 geprüft, Gen 3-7 unvollständig.; ohne "=" sind beide Namen gleich
+const DEX=`
+nidoranf,nidoranm,bisasam=bulbasaur,bisaknosp=ivysaur,bisaflor=venusaur,glumanda=charmander,glutexo=charmeleon,glurak=charizard,schiggy=squirtle,schillok=wartortle,turtok=blastoise,raupy=caterpie,safcon=metapod,smettbo=butterfree,hornliu=weedle,kokuna=kakuna,
+bibor=beedrill,taubsi=pidgey,tauboga=pidgeotto,tauboss=pidgeot,rattfratz=rattata,rattikarl=raticate,habitak=spearow,ibitak=fearow,rettan=ekans,arbok,pikachu,raichu,sandan=sandshrew,sandamer=sandslash,nidoran=nidoranf,nidorina,
+nidoqueen,nidorino,nidoking,piepi=clefairy,pixi=clefable,vulpix,vulnona=ninetales,pummeluff=jigglypuff,knuddeluff=wigglytuff,zubat,golbat,myrapla=oddish,duflor=gloom,giflor=vileplume,paras,parasek=parasect,
+bluzuk=venonat,omot=venomoth,digda=diglett,digdri=dugtrio,mauzi=meowth,snobilikat=persian,enton=psyduck,entoron=golduck,menki=mankey,rasaff=primeape,fukano=growlithe,arkani=arcanine,quapsel=poliwag,quaputzi=poliwhirl,quappo=poliwrath,abra,
+kadabra,simsala=alakazam,machollo=machop,maschock=machoke,machomei=machamp,knofensa=bellsprout,ultrigaria=weepinbell,sarzenia=victreebel,tentacha=tentacool,tentoxa=tentacruel,kleinstein=geodude,georok=graveler,geowaz=golem,ponita=ponyta,gallopa=rapidash,flegmon=slowpoke,
+lahmus=slowbro,magnetilo=magnemite,magneton,porenta=farfetchd,dodu=doduo,dodri=dodrio,jurob=seel,jugong=dewgong,sleima=grimer,sleimok=muk,muschas=shellder,austos=cloyster,nebulak=gastly,alpollo=haunter,gengar,onix,
+traumato=drowzee,hypno,krabby,kingler,voltobal=voltorb,lektrobal=electrode,owei=exeggcute,kokowei=exeggutor,tragosso=cubone,knogga=marowak,kicklee=hitmonlee,nockchan=hitmonchan,schlurp=lickitung,smogon=koffing,smogmog=weezing,rihorn=rhyhorn,
+rizeros=rhydon,chaneira=chansey,tangela,kangama=kangaskhan,seeper=horsea,seemon=seadra,goldini=goldeen,golking=seaking,sterndu=staryu,starmie,pantimos=mrmime,sichlor=scyther,rossana=jynx,elektek=electabuzz,magmar,pinsir,
+tauros,karpador=magikarp,garados=gyarados,lapras,ditto,evoli=eevee,aquana=vaporeon,blitza=jolteon,flamara=flareon,porygon,amonitas=omanyte,amoroso=omastar,kabuto,kabutops,aerodactyl,relaxo=snorlax,
+arktos=articuno,zapdos,lavados=moltres,dratini,dragonir=dragonair,dragoran=dragonite,mewtu=mewtwo,mew,endivie=chikorita,lorblatt=bayleef,meganie=meganium,feurigel=cyndaquil,igelavar=quilava,tornupto=typhlosion,karnimani=totodile,tyracroc=croconaw,
+impergator=feraligatr,wiesor=sentret,wiesenior=furret,hoothoot,noctuh=noctowl,ledyba,ledian,webarak=spinarak,ariados,iksbat=crobat,lampi=chinchou,lanturn,pichu,pii=cleffa,fluffeluff=igglybuff,togepi,
+togetic,natu,xatu,voltilamm=mareep,waaty=flaaffy,ampharos,marill,azumarill,mogelbaum=sudowoodo,quaxo=politoed,hoppspross=hoppip,hubelupf=skiploom,papungha=jumpluff,griffel=aipom,sonnkern=sunkern,sonnflora=sunflora,
+yanma,felino=wooper,morlord=quagsire,psiana=espeon,nachtara=umbreon,kramurx=murkrow,laschoking=slowking,icognito=unown,woingenau=wobbuffet,girafarig,tannza=pineco,forstellka=forretress,dummisel=dunsparce,skorgla=gligar,stahlos=steelix,snubbull,
+granbull,baldorfish=qwilfish,scherox=scizor,pottrott=shuckle,skaraborn=heracross,sniebel=sneasel,teddiursa,ursaring,schneckmag=slugma,magcargo,quiekel=swinub,keifel=piloswine,corasonn=corsola,remoraid,octillery,botogel=delibird,
+mantax=mantine,panzaeron=skarmory,hunduster=houndour,hundemon=houndoom,seedraking=kingdra,phanpy,donphan,porygon2,damhirplex=stantler,farbeagle=smeargle,rabauz=tyrogue,kapoera=hitmontop,kussilla=smoochum,elekid,magby,miltank,
+heiteira=blissey,raikou,entei,suicune,larvitar,pupitar,despotar=tyranitar,lugia,ho-oh,celebi,geckarbor=treecko,reptain=grovyle,gewaldro=sceptile,flemmli=torchic,jungglut=combusken,lohgock=blaziken,
+hydropi=mudkip,moorabbel=marshtomp,sumpex=swampert,fiffyen=poochyena,magnayen=mightyena,zigzachs=zigzagoon,geradaks=linoone,waumpel=wurmple,schaloko=silcoon,papinella=beautifly,panekon=cascoon,pudox=dustox,loturzel=lotad,lombrero=lombre,kappalores=ludicolo,samurzel=seedot,
+blanas=nuzleaf,tengulist=shiftry,schwalbini=taillow,schwalboss=swellow,wingull,pelipper,trasla=ralts,kirlia,guardevoir=gardevoir,gehweiher=surskit,maskeregen=masquerain,knilz=shroomish,kapilz=breloom,bummelz=slakoth,muntier=vigoroth,letarking=slaking,
+nincada,ninjask,ninjatom=shedinja,flurmel=whismur,krakeelo=loudred,krawumms=exploud,makuhita,hariyama,azurill,nasgnet=nosepass,eneco=skitty,enekoro=delcatty,zobiris=sableye,flunkifer=mawile,stollunior=aron,stollrak=lairon,
+stolloss=aggron,meditie=meditite,meditalis=medicham,frizelbliz=electrike,voltenso=manectric,plusle,minun,volbeat,illumise,roselia,schluppuck=gulpin,schlukwech=swalot,kanivanha=carvanha,tohaido=sharpedo,wailmer,wailord,
+camaub=numel,camerupt,qurtel=torkoal,spoink,groink=grumpig,pandir=spinda,knacklion=trapinch,vibrava,libelldra=flygon,tuska=cacnea,noktuska=cacturne,wablu,altaria,sengo=zangoose,vipitis=seviper,lunastein=lunatone,
+sonnfel=solrock,schmerbe=barboach,welsar=whiscash,krebscorps=corphish,krebutack=crawdaunt,liliep=lileep,wielie=cradily,anorith,armaldo,barschwa=feebas,milotic,formeo=castform,kecleon,shuppet,banette,zwirrlicht=duskull,
+zwirrklop=dusclops,tropius,palimpalim=chimecho,absol,isso=wynaut,schneppke=snorunt,firnontor=glalie,seemops=spheal,seejong=sealeo,walraisa=walrein,perlu=clamperl,aalabyss=huntail,saganabyss=gorebyss,relicanth,liebiskus=luvdisc,kindwurm=bagon,
+draschel=shelgon,brutalanda=salamence,tanhel=beldum,metang,metagross,regirock,regice,registeel,latias,latios,kyogre,groudon,rayquaza,jirachi,deoxys,chelast=turtwig,
+chelcarain=grotle,chelterrar=torterra,panflam=chimchar,panpyro=monferno,panferno=infernape,plinfa=piplup,pliprin=prinplup,impoleon=empoleon,staralili=starly,staravia,staraptor,bidiza=bidoof,bidifas=bibarel,zirpurze=kricketot,zirpeise=kricketune,sheinux=shinx,
+luxio,luxtra=luxray,knospi=budew,roserade,koknodon=cranidos,rameidon=rampardos,schilterus=shieldon,bollterus=bastiodon,burmy,burmadame=wormadam,moterpel=mothim,wadribie=combee,honweisel=vespiquen,pachirisu,bamelin=buizel,bojelin=floatzel,
+kikugi=cherubi,kinoso=cherrim,schalellos=shellos,gastrodon,ambidiffel=ambipom,driftlon=drifloon,drifzepeli=drifblim,haspiror=buneary,schlapor=lopunny,traunmagil=mismagius,kramshef=honchkrow,charmian=glameow,shnurgarst=purugly,klingplim=chingling,skunkapuh=stunky,skuntank,
+bronzel=bronzor,bronzong,mobai=bonsly,pantimimi=mimejr,wonneira=happiny,plaudagei=chatot,kryppuk=spiritomb,kaumalat=gible,knarksel=gabite,mampfaxo=munchlax,riolu,lucario,hippopotas,hippoterus=hippowdon,pionskora=skorupi,piondragi=drapion,
+glibunkel=croagunk,toxiquak=toxicroak,venuflibis=carnivine,finneon,lumineon,mantirps=mantyke,shnebedeck=snover,rexblisar=abomasnow,snibunna=weavile,magnezone,schlurplek=lickilicky,rihornior=rhyperior,tangoloss=tangrowth,elevoltek=electivire,magbrant=magmortar,togekiss,
+yanmega,folipurba=leafeon,glaziola=glaceon,skorgro=gliscor,mamutel=mamoswine,porygon-z,galagladi=gallade,voluminas=probopass,zwirrfinst=dusknoir,frosdedje=froslass,rotom,selfe=uxie,vesprit=mesprit,tobutz=azelf,dialga,palkia,
+heatran,regigigas,giratina,cresselia,phione,manaphy,darkrai,shaymin,arceus,victini,serpifeu=snivy,efoserp=servine,serpiroyal=serperior,floink=tepig,ferkokel=pignite,flambirex=emboar,
+ottaro=oshawott,zwottronin=dewott,admurai=samurott,nagelotz=patrat,kukmarda=watchog,yorkleff=lillipup,terribark=herdier,bissbark=stoutland,felilou=purrloin,kleoparda=liepard,vegimak=pansage,vegichita=simisage,grillmak=pansear,grillchita=simisear,sodamak=panpour,sodachita=simipour,
+somniam=munna,somnivora=musharna,dusselgurr=pidove,navitaub=tranquill,fasasnob=unfezant,elezeba=blitzle,zebritz=zebstrika,kiesling=roggenrola,sedimantur=boldore,brockoloss=gigalith,fleknoil=woobat,fletiamo=swoobat,rotomurf=drilbur,stalobor=excadrill,ohrdoch=audino,praktibalk=timburr,
+strawickl=gurdurr,mebrana=conkeldurr,jiutesto=throh,karadonis=sawk,monozyto=solosis,mitodos=duosion,zytomega=reuniclus,swaroness=swanna,gelatini=vanillite,gelatroppo=vanillish,sesokitz=deerling,kronjuwild=sawsbuck,emolga,klikk=klink,kliklak=klang,klikdiklak=klinklang,
+zapplardin=tynamo,zapplalek=eelektrik,zapplarang=eelektross,lichtel=litwick,laternecto=lampent,skelabra=chandelure,milza=axew,sharfax=fraxure,maxax=haxorus,meistagrif=mienshao,golbit=golett,golgantes=golurk,gladiantri=bisharp,bisofank=bouffalant,geronimatz=rufflet,washakwil=braviary,
+skallyk=vullaby,grypheldis=mandibuzz,furnifrass=heatmor,fermicula=durant,kapuno=deino,duodino=zweilous,trikephalo=hydreigon,ignivor=larvesta,ramoth=volcarona,kobalium=cobalion,terrakium=terrakion,viridium=virizion,boreos=tornadus,voltolos=thundurus,reshiram,zekrom,
+demeteros=landorus,kyurem,keldeo,meloetta,genesect,zorua,zoroark,symvolara=sigilyph,makabaja=yamask,echnatoll=cofagrigus,picochilla=minccino,chillabell=cinccino,unratuetox=trubbish,deponitox=garbodor,alomomola=alomomola,mamolida=alomomola,
+igamaro=chespin,igastarnish=quilladin,brigaron=chesnaught,fynx=fennekin,rutena=braixen,fennexis=delphox,froxy=froakie,amphizel=frogadier,quajutsu=greninja,scoppel=bunnelby,grebbit=diggersby,dartiri=fletchling,dartignis=fletchinder,fiaro=talonflame,purmel=scatterbug,puponcho=spewpa,
+vivillon,leufeo=litleo,pyroleo=pyroar,flabebe,floette,florges,maehikel=skiddo,chevrumm=gogoat,pam-pam=pancham,pandagro=pangoro,coiffwaff=furfrou,psiau=espurr,psiaugon=meowstic,gramokles=honedge,duokles=doublade,durengard=aegislash,
+parfi=spritzee,parfinesse=aromatisse,sabbaione=slurpuff,iscalar=inkay,calamanero=malamar,bithora=binacle,thanathora=barbaracle,algitt=skrelp,tandrak=dragalge,scampisto=clauncher,wummer=clawitzer,amarino=tyrunt,amagarga=tyrantrum,resladero=hawlucha,dedenne,carbink,
+viscora=goomy,viscargot=sliggoo,viscogon=goodra,clavion=klefki,paragoni=phantump,trombork=trevenant,pumpdjinn=gourgeist,noivern,xerneas,yveltal,zygarde,diancie,hoopa,volcanion,bauz=rowlet,arboretoss=dartrix,
+silvarro=decidueye,flamiau=litten,miezunder=torracat,fuegro=incineroar,robball=popplio,marikeck=brionne,primarene=primarina,peppeck=pikipek,trompeck=trumbeak,tukanon=toucannon,mangunior=yungoos,manguspektor=gumshoos,mabula=grubbin,donarion=vikavolt,choreogel=oricorio,wommel=cutiefly,
+bandelby=ribombee,wuffels=rockruff,lusardin=wishiwashi,toxiped=toxapex,salandit,frubberl=bounsweet,frubaila=steenee,fruyal=tsareena,curelei=comfey,kommandutan=oranguru,quartermak=passimian,sandigas=sandygast,typnull=typenull,amigento=silvally,meteno=minior,koalelu=komala,
+tortunator=turtonator,togedemaru,mimikyu,drampa,dhelmise,grandiras=kommoo,kapu-riki=tapukoko,kapu-fala=tapulele,kapu-toro=tapubulu,kapu-kime=tapufini,cosmog,cosmovum=cosmoem,solgaleo,lunala,nihilego,buzzwole,
+pheromosa,xurkitree,celesteela,kartana,guzzlord,necrozma,magearna,marshadow,poipole,naganadel,stakataka,blacephalon,zeraora,meltan,melmetal,blubella=bellossom,
+traunfugil=misdreavus,feelinara=sylveon,flauschling=swirlix,puppance=baltoy,lepumentas=claydol,knakrack=garchomp,strepoli=gurdurr,meistagrif=conkeldurr,mebrana=palpitoad,schallquap=tympole,branawarz=seismitoad,strawickl=sewaddle,folikon=swadloon,matrifol=leavanny,toxiped=venipede,rollum=whirlipede,
+cerapendra=scolipede,waumboll=cottonee,elfun=whimsicott,lilminip=petilil,dressella=lilligant,barschuft=basculin,ganovil=sandile,rokkaiman=krokorok,rabigator=krookodile,flampion=darumaka,flampivian=darmanitan,maracamba=maractus,lithomith=dwebble,castellith=crustle,zurrokex=scraggy,irokex=scrafty,
+galapaflos=tirtouga,karippas=carracosta,flapteryx=archen,aeropteryx=archeops,unratütox=trubbish,deponitox=garbodor,mollimorba=gothita,hypnomorba=gothorita,morbitesse=gothitelle,piccolente=ducklett,gelatwino=vanilluxe,cavalanzas=escavalier,hutsassa=amoonguss,quabbel=frillish,apoquallyp=jellicent,wattzapf=joltik,
+voltula=galvantula,kastadur=ferroseed,tentantel=ferrothorn,pygraulon=elgyem,megalon=beheeyem,petznief=cubchoo,siberio=beartic,frigometri=cryogonal,schnuthelm=shelmet,hydragil=accelgor,laukaps=karrablast,flunschlik=stunfisk,lin-fu=mienfoo,wie-shu=mienshao,shardrago=druddigon,gladiantri=pawniard,
+caesurio=bisharp,balgoras=tyrunt,monargoras=tyrantrum,amarino=amaura,amagarga=aurorus,eguana=helioptile,elezard=heliolisk,rocara=carbink,irrbis=pumpkaboo,arktip=bergmite,arktilas=avalugg,ef-em=noibat,uhafnir=noivern,akkup=charjabug,krabbox=crabrawler,krawell=crabominable,
+wolwerock=lycanroc,garstella=mareanie,aggrostella=toxapex,pampuli=mudbray,pampross=mudsdale,araqua=dewpider,aranestro=araquanid,imantis=fomantis,mantidea=lurantis,bubungus=morelull,lamellux=shiinotic,molunk=salandit,amfira=salazzle,velursi=stufful,kosturso=bewear,reißlaus=wimpod,
+tectass=golisopod,sankabuh=sandygast,colossand=palossand,gufa=pyukumuku,mimigma=mimikyu,knirfish=bruxish,sen-long=drampa,moruda=dhelmise,miniras=jangmoo,mediras=hakamoo,anego=nihilego,masskito=buzzwole,schabelle=pheromosa,voltriant=xurkitree,kaguron=celesteela,katagami=kartana,
+schlingking=guzzlord,venicro=poipole,agoyon=naganadel,muramura=stakataka,kopplosio=blacephalon,
+tarnpignon=foongus
+`;
+const K=t=>(t||"").toLowerCase().replace(/♀/g,"f").replace(/♂/g,"m").replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+const pokemonTranslations={},ENS=new Set();
+DEX.trim().split(/[,\s]+/).forEach(p=>{const[d,e]=p.split("=");const en=K(e||d);pokemonTranslations[K(d)]=en;ENS.add(en)});
+const spriteId=n=>{const k=K(n);return pokemonTranslations[k]||(ENS.has(k)?k:null)};
+function Pic({n,sz}){
+ const id=spriteId(n),[bad,setBad]=useState(false);
+ React.useEffect(()=>{setBad(false)},[id]);
+ return id&&!bad?h("img",{src:"https://play.pokemonshowdown.com/sprites/dex/"+id+".png",alt:n,loading:"lazy",onError:()=>setBad(true),className:"shrink-0 object-contain",style:{width:sz,height:sz,maxWidth:sz,maxHeight:sz}}):Fb(n,sz)}
+const Av=(n,sz)=>h(Pic,{n,sz});
+const Lbl=(t,c)=>h("div",{className:"text-[11px] tracking-[.25em] font-bold "+(c||"text-violet-400")},t);
+const SPS=56,GS={gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))"}; // kompakte Sprite-Größe für Box & Tode
+const Mini=(n,tone,k)=>h("div",{key:k,className:"rounded-lg border p-2 flex flex-col items-center gap-1 text-center "+tone},Av(n,SPS),h("span",{className:"text-xs text-gray-200 whitespace-nowrap capitalize"},n));
+const Deaths=l=>h("div",{className:"flex rounded-xl border border-red-500/30 bg-red-500/5 overflow-hidden"},
+ h("div",{className:"w-24 shrink-0 py-4 text-center border-r border-red-500/30 bg-red-500/10 flex flex-col justify-center"},h("div",{className:"text-2xl"},"🪦"),h("div",{className:"text-5xl font-bold text-red-400"},l.length),h("div",{className:"text-xs tracking-widest text-red-400"},"TOT")),
+ h("div",{className:"flex-1 min-w-0 p-3"},l.length?h("div",{className:"grid gap-2",style:GS},l.map((n,i)=>Mini(n,"bg-black/40 border-red-500/30",i))):h("span",{className:"text-sm text-gray-500"},"Keine Tode eingetragen")));
+const StarterBox=n=>h("div",{className:"card px-5 py-3 flex items-center gap-4"},
+ h("div",{className:"relative shrink-0"},h("div",{className:"rounded-full border border-white/10 bg-white/5 grid place-items-center",style:{width:88,height:88}},Av(n,SPS)),h("span",{className:"absolute -top-1 -right-1 text-violet-400"},"★")),
+ h("div",{className:"min-w-0"},Lbl("STARTER"),h("div",{className:"text-3xl font-bold capitalize"},n||"–")));
+const Inp=({v,on,ph})=>h("input",{value:v,onChange:e=>on(e.target.value),placeholder:ph,className:"w-full min-w-0 px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/15 outline-none focus:border-violet-500"});
+
+const CInp=({v,on,ph})=>{const[t,setT]=useState(v);React.useEffect(()=>{setT(v)},[v]);
+ return h("input",{value:t,onChange:e=>setT(e.target.value),onBlur:()=>{if(t!==v)on(t)},onKeyDown:e=>{if(e.key=="Enter")e.target.blur()},placeholder:ph,className:"w-full min-w-0 px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/15 outline-none focus:border-violet-500"})};
+const CTa=({v,on,ph})=>{const[t,setT]=useState(v);React.useEffect(()=>{setT(v)},[v]);
+ return h("textarea",{value:t,onChange:e=>setT(e.target.value),onBlur:()=>{if(t!==v)on(t)},rows:2,placeholder:ph,className:"w-full mt-2 px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/15 outline-none focus:border-red-500"})};
+const BoxView=x=>h("details",{className:"mb-4 rounded-xl border border-white/10 bg-white/5 p-3"},h("summary",{className:"cursor-pointer font-bold text-lg"},"📦 Meine Box ("+bl(x).length+" Pokémon)"),
+ bl(x).length?h("div",{className:"grid gap-2 mt-3",style:GS},bl(x).map((n,k)=>Mini(n,"bg-black/40 border-white/15",k))):h("div",{className:"text-sm text-gray-500 mt-3"},"Die Box ist leer."));
+function Stand(){
+ const[g,setG]=useState(()=>{try{const v=JSON.parse(localStorage.getItem("gl_state"));if(v&&v.length==G.length)return v}catch(e){}return init()});
+ const[ed,setEd]=useState(false),[bv,setBv]=useState("");
+ const addBox=i=>{const t=bv.trim();if(!t)return;up(i,{box:[...bl(g[i]),t].join(", ")});setBv("")};
+ const boxEd=(i,x)=>h("div",{className:"mt-4"},Lbl("POKÉMON AUF DER BOX REGISTRIEREN"),
+    h("div",{className:"flex gap-2 mt-2"},h(Inp,{v:bv,ph:"Name der Box-Pokémon…",on:setBv}),h(Btn,{onClick:()=>addBox(i)},"Hinzufügen")),
+    h("div",{className:"flex flex-wrap gap-2 mt-2"},bl(x).map((n,k)=>h("span",{key:k,className:"px-2 py-1 rounded-md text-xs bg-white/5 border border-white/15 flex items-center gap-1"},n,h("button",{onClick:()=>up(i,{box:bl(x).filter((_,m)=>m!=k).join(", ")}),className:"text-fuchsia-400"},"✕")))));
+ React.useEffect(()=>{if(!isAdmin())return;try{const nv=JSON.stringify(g);if(localStorage.getItem("gl_state")!==nv){localStorage.setItem("gl_state",nv);localStorage.setItem("gl_dirty","1")}}catch(e){}syncEnc()},[g]);
+ const up=(i,p)=>setG(a=>a.map((x,j)=>j==i?{...x,...p}:x));
+ const cur=g.findIndex(x=>x.s==1),done=g.map((x,i)=>i).filter(i=>g[i].s==2);
+ const DT=(i,t)=>h(CTa,{v:g[i].dt,on:v=>up(i,{dt:v}),ph:t});
+ const admin=h("div",{className:"grid gap-4 mb-10"},G.map((G0,i)=>{const x=g[i];return h("div",{key:i,className:"card p-4"},
+  h("div",{className:"flex flex-wrap gap-3 items-center"},h("b",{className:"text-violet-300"},"GEN "+pad(i)+" · "+G0.name),
+   h("select",{value:x.s,onChange:e=>up(i,{s:+e.target.value}),className:"px-3 py-2 rounded-lg text-sm bg-black border border-white/20"},["Offen","Läuft gerade","Geschafft"].map((t,k)=>h("option",{key:k,value:k},t))),
+   h("div",{className:"flex-1 min-w-[160px]"},h(Inp,{v:x.st,on:v=>up(i,{st:v}),ph:"Starter"}))),
+  x.s==1&&h("div",{className:"mt-3"},Lbl("AKTUELLES TEAM (bis 6)"),
+   h("div",{className:"grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2"},x.team.map((t,k)=>h(CInp,{key:k,v:t,ph:"Slot "+(k+1),on:v=>up(i,{team:x.team.map((o,m)=>m==k?v:o)})}))),
+   boxEd(i,x),
+   DT(i,"Tode in dieser Gen (Komma oder Zeilenumbruch)")),
+  x.s==2&&h("div",{className:"mt-3"},Lbl("CHAMP-TEAM (6) + ÜBERLEBT?"),
+   h("div",{className:"grid sm:grid-cols-2 gap-2 mt-2"},x.ch.map((c,k)=>h("div",{key:k,className:"flex gap-2 items-center"},
+    h(CInp,{v:c.n,ph:"Pokémon "+(k+1),on:v=>up(i,{ch:x.ch.map((o,m)=>m==k?{...o,n:v}:o)})}),
+    h("label",{className:"flex items-center gap-1 text-xs text-gray-400 whitespace-nowrap"},h("input",{type:"checkbox",checked:c.a,onChange:e=>up(i,{ch:x.ch.map((o,m)=>m==k?{...o,a:e.target.checked}:o)})}),"überlebt")))),
+   boxEd(i,x),
+   DT(i,"Alle Tode dieser Gen (Komma oder Zeilenumbruch)")))}),
+  h("div",{className:"text-right"},h(Btn,{onClick:()=>{if(confirm("Alles zurücksetzen?"))setG(init())}},"Run zurücksetzen")));
+ return h("div",{className:"mt-6"},
+  h("div",{className:"flex justify-between items-center flex-wrap gap-3 mb-6"},h("h2",{className:"text-3xl font-bold"},"Der Stand der Challenge"),
+   isAdmin()&&h(Btn,{onClick:()=>setEd(!ed)},"Bearbeitungsmodus umschalten ⚙️")),
+  ed&&isAdmin()&&admin,
+  h("h3",{className:"text-2xl font-bold mb-3"},"Aktuelle Generation"),
+  cur<0?h("div",{className:"card p-8 text-gray-500"},"Aktuell läuft keine Generation."):(()=>{const x=g[cur],t=x.team.filter(Boolean);return h("div",{className:"card p-6"},
+   h("div",null,h("div",{className:"flex flex-wrap items-center justify-between gap-4 mb-6"},h("div",null,Lbl("GEN "+(cur+1)+" · LÄUFT GERADE"),h("div",{className:"text-4xl font-bold mt-1"},G[cur].name)),StarterBox(x.st)),
+    h("div",{className:"text-xl font-bold mb-3"},"Aktuelles Team ",h("span",{className:"text-sm font-normal text-gray-400"},t.length+" von 6 im Team")),
+    h("div",{className:"grid grid-cols-2 sm:grid-cols-3 auto-rows-fr gap-4 mb-6"},t.map((n,i)=>h("div",{key:i,className:"rounded-xl border border-white/10 bg-white/5 p-5 flex flex-col items-center gap-2 text-center"},Av(n,SPL),h("div",{className:"font-bold w-full whitespace-nowrap capitalize",style:{fontSize:"clamp(15px,1.9vw,28px)"}},n+" ",h("span",{className:"text-green-400"},"✓")),h("div",{className:"text-xs text-green-400"},"Im Team"),h("div",{className:"h-1.5 w-full rounded bg-green-500"})))),
+    !ed&&BoxView(x),
+    Deaths(dl(x))))})(),
+  h("h3",{className:"text-2xl font-bold mt-12 mb-3 pb-2 border-b border-white/10 flex justify-between items-end"},"Fortschritt in diesem Run",h("span",{className:"text-xs tracking-widest text-gray-500"},done.length+" VON "+G.length+" GESCHAFFT")),
+  h("div",{className:"grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3"},G.map((G0,i)=>{const s=g[i].s,c=["border-white/10 text-gray-500","border-violet-500/70 bg-violet-500/10 text-violet-300","border-green-500/50 bg-green-500/5 text-green-400"][s];
+   return h("div",{key:i,className:"rounded-xl border p-3 flex flex-col gap-2 min-h-[170px] min-w-0 "+c},
+    h("div",{className:"flex justify-between items-baseline"},h("span",{className:"text-[10px] tracking-widest"},"GEN"),h("span",{className:"text-3xl font-bold"},pad(i))),
+    h("div",{className:"h-1 rounded "+(s==2?"bg-green-500":s==1?"bg-violet-500":"bg-white/10")}),
+    h("div",{className:"text-[10px] tracking-widest font-bold"},(["•","▶","✓"][s])+" "+SL[s]),
+    h("div",{lang:"de",className:"text-sm text-gray-200 flex-1 break-words hyphens-auto [overflow-wrap:anywhere]"},G0.name),
+    h("div",{className:"text-sm text-gray-300 bg-black/30 rounded-lg px-2 py-1 w-fit"},"💀 "+dl(g[i]).length+" tot"))})),
+  h("div",{className:"mt-12 mb-3 pb-2 border-b border-white/10 flex justify-between items-end"},h("div",null,Lbl("ABSCHLUSSBERICHT","text-green-400"),h("h3",{className:"text-2xl font-bold"},"Geschaffte Generationen")),
+   h("span",{className:"text-xs text-gray-400"},h("span",{className:"text-green-400"},"✓")," Überlebt  ",h("span",{className:"text-red-400"},"×")," Gefallen")),
+  done.length?h("div",{className:"grid gap-6"},done.map(i=>{const x=g[i],ch=x.ch.filter(c=>c.n.trim());return h("div",{key:i,className:"card p-6"},
+   h("div",null,h("div",{className:"flex flex-wrap items-center justify-between gap-4 mb-6"},h("div",null,Lbl("GEN "+(i+1)+" · CHAMP BESIEGT","text-green-400"),h("div",{className:"text-4xl font-bold mt-1"},G[i].name)),StarterBox(x.st)),
+    h("div",{className:"text-xl font-bold mb-3"},"Champ-Team ",h("span",{className:"text-sm font-normal text-gray-400"},ch.filter(c=>c.a).length+" überlebt")),
+    h("div",{className:"grid grid-cols-2 sm:grid-cols-3 auto-rows-fr gap-4 mb-6"},ch.map((c,k)=>h("div",{key:k,className:"rounded-xl border p-5 flex flex-col items-center gap-2 text-center "+(c.a?"border-white/10 bg-white/5":"border-red-500/30 bg-red-500/5 opacity-70")},Av(c.n,SPL),h("div",{className:"font-bold w-full whitespace-nowrap capitalize "+(c.a?"":"line-through text-gray-400"),style:{fontSize:"clamp(15px,1.9vw,28px)"}},c.n+" ",c.a?h("span",{className:"text-green-400"},"✓"):h("span",{className:"text-red-400 no-underline"},"×")),h("div",{className:"h-1.5 w-full rounded "+(c.a?"bg-green-500":"bg-white/10")})))),
+    BoxView(x),
+    Deaths(dl(x))))})):h("div",{className:"card p-8 text-gray-500"},"Noch keine Generation geschafft."))}
+
+function Graveyard(){
+ let g;try{g=JSON.parse(localStorage.getItem("gl_state"))}catch(e){}
+ if(!g||g.length!=G.length)g=init();
+ const out=[];
+ g.forEach((x,i)=>{const seen=new Set();[...dl(x),...x.ch.filter(c=>!c.a).map(c=>c.n.trim())].filter(Boolean).forEach(n=>{const k=n.toLowerCase();if(!seen.has(k)){seen.add(k);out.push({n,i})}})});
+ return h("div",{className:"mt-6"},
+  h("div",{className:"flex justify-between items-end flex-wrap gap-2 mb-6"},h("div",null,Lbl("FRIEDHOF","text-red-400"),h("h2",{className:"text-3xl font-bold"},"Todesliste")),
+   h("span",{className:"text-sm text-gray-400"},"🪦 "+out.length+" gefallen")),
+  out.length?h("div",{className:"grid gap-3 sm:grid-cols-2 lg:grid-cols-3"},out.map((d,k)=>h("div",{key:k,className:"rounded-xl p-4 flex gap-4 items-center border border-red-500/25 bg-gradient-to-br from-red-500/10 to-transparent hover:border-red-500/60 hover:shadow-[0_0_20px_rgba(239,68,68,.2)] transition"},
+   h("div",{className:"opacity-70 grayscale"},Av(d.n,SP)),
+   h("div",{className:"min-w-0"},h("div",{className:"font-bold text-lg text-gray-200 truncate"},d.n+" 💀"),
+    h("div",{className:"text-xs text-gray-500 mt-1"},"Gefallen in: Gen "+pad(d.i)+" - "+G[d.i].name))))):
+  h("div",{className:"card p-12 text-center text-gray-400"},h("div",{className:"text-4xl mb-3"},"🕯️"),"Noch keine Verluste in diesem Run. Möge Arceus dein Team beschützen!"))}
+
+function Encounters(){
+ const[l,setL]=useState(()=>{syncEnc();try{const v=JSON.parse(localStorage.getItem("gl_enc"));if(Array.isArray(v))return v.map(x=>typeof x=="string"?{n:x,f:"",g:"",r:false}:{g:"",r:false,...x})}catch(e){}return[]});
+ const[q,setQ]=useState(""),[nv,setNv]=useState(""),[fv,setFv]=useState(""),[msg,setMsg]=useState(""),[el,setEl]=useState(null),[ev,setEv]=useState(""),[fg,setFg]=useState("all"),[fo,setFo]=useState(false),[gv,setGv]=useState(()=>{try{const i=JSON.parse(localStorage.getItem("gl_state")).findIndex(x=>x.s==1);return i<0?"":String(i)}catch(e){return ""}});
+ React.useEffect(()=>{if(!isAdmin())return;try{const nv=JSON.stringify(l);if(localStorage.getItem("gl_enc")!==nv){localStorage.setItem("gl_enc",nv);localStorage.setItem("gl_dirty","1")}}catch(e){}},[l]);
+ const key=t=>t.trim().toLowerCase(),toks=f=>f.split(",").map(key).filter(Boolean),names=e=>[key(e.n),...toks(e.f)];
+ const saveLine=e=>{setL(l.map(x=>x===e?{...x,f:ev.trim()}:x));setEl(null)};
+ const add=()=>{const t=nv.trim(),f=fv.trim();if(!t)return;const ex=l.find(x=>key(x.n)==key(t));
+  if(ex){if(f){setL(l.map(x=>x===ex?{...x,f}:x));setMsg("Familie von "+ex.n+" aktualisiert.");setFv("")}else setMsg(t+" ist bereits registriert.");return}
+  setL([...l,{n:t,f,g:gv,r:false}]);setNv("");setFv("");setMsg(t+" eingetragen"+(f?" (Familie: "+f+").":"."))};
+ const groups=(()=>{const gs=[];l.forEach(e=>{const m={s:new Set(names(e)),m:[e]};gs.filter(g=>[...m.s].some(k=>g.s.has(k))).forEach(g=>{g.s.forEach(k=>m.s.add(k));m.m.push(...g.m);gs.splice(gs.indexOf(g),1)});gs.push(m)});return gs})();
+ const qq=key(q),exact=l.find(x=>key(x.n)==qq),grp=qq&&!exact?groups.find(g=>g.s.has(qq)):null;
+ const hitG=exact?groups.find(g=>g.m.includes(exact)):grp,unl=hitG&&hitG.m.some(x=>x.r);
+ const lab=grp?(grp.m.find(x=>x.f)?grp.m.find(x=>x.f).f.split(",")[0].trim():grp.m[0].n):"";
+ const sug=qq.length>=3?l.filter(x=>x!==exact&&!(grp&&grp.m.includes(x))&&names(x).some(k=>k.length>=3&&(k.includes(qq)||qq.includes(k)))):[];
+ const sorted=l.filter(e=>fg=="all"||(fg=="none"?e.g==="":e.g===fg)).sort((a,b)=>a.n.localeCompare(b.n,"de"));
+ const hl=n=>qq&&names(n).some(k=>k.includes(qq));
+ const neon=(c,t)=>({textShadow:"0 0 14px "+c});
+ return h("div",{className:"mt-6"},
+  h("div",{className:"mb-6 flex flex-wrap justify-between items-end gap-3"},h("div",null,Lbl("DUPES CLAUSE"),h("h2",{className:"text-3xl font-bold"},"Encounter-Datenbank")),
+   h(Btn,{onClick:()=>setFo(!fo)},"Nach Generation filtern 🗂️"+(fg!="all"?" · aktiv":""))),
+  fo&&h("div",{className:"flex flex-wrap gap-2 mb-5"},[["all","Alle"]].concat(G.map((g,i)=>[String(i),"Gen "+pad(i)+" - "+g.name]),[["none","Ohne Gen"]]).map(([k,t])=>h("button",{key:k,onClick:()=>setFg(k),className:"px-3 py-1.5 rounded-full text-xs border "+(fg==k?"border-fuchsia-500 bg-fuchsia-500/20 text-white":"border-white/15 text-gray-400 hover:text-white")},t))),
+  h("input",{value:q,onChange:e=>setQ(e.target.value),placeholder:"Pokémon suchen... 🔍",className:"w-full px-5 py-4 text-xl rounded-2xl bg-white/5 border border-violet-500/50 outline-none focus:border-fuchsia-500 focus:shadow-[0_0_24px_rgba(217,70,239,.35)]"}),
+  h("div",{className:"grid gap-4 md:grid-cols-2 mt-5"},
+   isAdmin()&&h("div",{className:"card p-5"},h("h3",{className:"font-bold text-violet-300 mb-3"},"Neues Pokémon registrieren"),
+    h("div",{className:"grid gap-2"},
+     h("input",{value:nv,onChange:e=>{setNv(e.target.value);setMsg("")},onKeyDown:e=>e.key=="Enter"&&add(),placeholder:"Pokémon-Name… (z.B. Glutexo)",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
+     h("input",{value:fv,onChange:e=>setFv(e.target.value),onKeyDown:e=>e.key=="Enter"&&add(),placeholder:"Entwicklungs-Linie / Familie (optional) – z.B. Glumanda, Glurak",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
+     h("select",{value:gv,onChange:e=>setGv(e.target.value),className:"px-3 py-2 rounded-lg text-sm bg-black border border-white/20"},[h("option",{key:"x",value:""},"Generation (optional)")].concat(G.map((g,i)=>h("option",{key:i,value:String(i)},"Gen "+pad(i)+" - "+g.name)))),
+     h(Btn,{onClick:add},"Als Encounter eintragen")),
+    h("p",{className:"text-xs text-gray-500 mt-2 min-h-[1rem]"},msg)),
+   h("div",{className:"card p-5 flex flex-col justify-center text-center min-h-[130px]"},h("h3",{className:"font-bold text-violet-300 mb-3"},"Live Dupes-Check"),
+    !qq?h("div",{className:"text-gray-500"},"Tippe oben einen Namen ein."):
+    unl?h("div",null,h("div",{className:"text-2xl font-bold text-green-400",style:neon("rgba(74,222,128,.9)")},"🟢 GÜLTIGER ENCOUNTER (Reihe durch Revive freigeschaltet!)"),h("div",{className:"text-sm text-gray-300 mt-1"},"Revived 🔄: "+hitG.m.filter(x=>x.r).map(x=>x.n).join(", "))):
+    exact?h("div",null,h("div",{className:"text-2xl font-bold text-red-400",style:neon("rgba(248,113,113,.9)")},"🔴 DUPLIKAT (Bereits gefangen!)"),h("div",{className:"text-sm text-gray-400 mt-1"},"Gültig für einen Reroll")):
+    grp?h("div",null,h("div",{className:"text-2xl font-bold text-orange-400",style:neon("rgba(251,146,60,.9)")},"🟠 LINIEN-DUPLIKAT (Familie bereits gefangen!)"),h("div",{className:"text-sm text-gray-300 mt-1"},"Aus der "+lab+"-Reihe gefangen: "+grp.m.map(x=>x.n).join(", ")+(grp.m.some(x=>x.f)?" · Linie: "+[...new Set(grp.m.filter(x=>x.f).map(x=>x.f))].join(" | "):""))):
+    h("div",{className:"text-2xl font-bold text-green-400",style:neon("rgba(74,222,128,.9)")},"🟢 GÜLTIGER ENCOUNTER"),
+    sug.length>0&&h("div",{className:"mt-3 text-xs text-yellow-300"},"Mögliche Treffer (Namensähnlichkeit): ",sug.map(x=>x.n+(x.f?" ("+x.f+")":"")).join(" · ")))),
+  h("h3",{className:"text-2xl font-bold mt-10 mb-3 pb-2 border-b border-white/10 flex justify-between items-end"},"Alle registrierten Pokémon",h("span",{className:"text-xs tracking-widest text-gray-500"},(fg=="all"?l.length:sorted.length+" VON "+l.length)+" GEFANGEN")),
+  sorted.length?h("div",{className:"grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-h-[480px] overflow-y-auto pr-1"},sorted.map(e=>h("div",{key:e.n,className:"rounded-lg border px-3 py-2 "+(hl(e)?"border-fuchsia-500 bg-fuchsia-500/10":"border-white/10 bg-white/5")},
+   h("div",{className:"flex items-start justify-between gap-2"},
+    h("div",{className:"min-w-0"},h("div",{className:"truncate font-bold"},e.n),e.f&&h("div",{className:"text-[11px] text-orange-300/80 truncate"},"Familie: "+e.f),
+     h("div",{className:"text-[11px] text-gray-500"},e.g!==""?"Gen "+pad(+e.g)+" - "+G[+e.g].name:"Ohne Gen")),
+    h("div",{className:"flex items-center gap-2"},h("span",{className:"text-[10px] px-2 py-0.5 rounded-full border "+(e.r?"border-green-500/60 text-green-400":"border-violet-500/50 text-violet-300")},e.r?"Revived 🔄":"Aktiv"),
+     isAdmin()&&h("button",{onClick:()=>setL(l.filter(x=>x!==e)),className:"text-fuchsia-400 hover:text-white px-1","aria-label":"Löschen"},"✕"))),
+   isAdmin()&&h("div",{className:"mt-2 flex flex-wrap gap-x-4 gap-y-1"},
+    h("button",{onClick:()=>setL(l.map(x=>x===e?{...x,r:!x.r}:x)),className:"text-xs text-gray-300 hover:text-white underline decoration-dotted"},e.r?"Zurück auf Aktiv setzen":"Als wiederbelebt markieren 🔄"),
+    h("button",{onClick:()=>{setEl(el===e.n?null:e.n);setEv(e.f)},className:"text-xs text-orange-300 hover:text-white underline decoration-dotted"},"Linie bearbeiten ✏️")),
+   isAdmin()&&el===e.n&&h("div",{className:"mt-2 flex gap-2"},h("input",{value:ev,autoFocus:true,onChange:k=>setEv(k.target.value),onKeyDown:k=>k.key=="Enter"&&saveLine(e),placeholder:"z.B. Glumanda, Glutexo, Glurak",className:"flex-1 min-w-0 px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-orange-400/50 outline-none"}),h(Btn,{onClick:()=>saveLine(e)},"OK"))))):
+  h("div",{className:"card p-8 text-center text-gray-500"},l.length?"Keine Fänge in dieser Auswahl.":"Noch keine Encounter registriert."))}
+
+const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
+const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const wKey=()=>{try{return API_KEY||localStorage.getItem("gl_key")||""}catch(e){return API_KEY}};
+async function cloudPull(){
+ const hd={"X-Bin-Meta":"false"};
+ if(isAdmin()&&wKey())hd["X-Master-Key"]=wKey();else if(READ_KEY)hd["X-Access-Key"]=READ_KEY;
+ const r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:hd});
+ if(!r.ok)throw new Error("HTTP "+r.status);
+ const j=await r.json();return j.record||j}
+async function cloudPush(data){
+ const k=wKey();if(!k)throw new Error("Kein API-Key hinterlegt");
+ const r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID,{method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":k},body:JSON.stringify(data)});
+ if(!r.ok)throw new Error("HTTP "+r.status)}
+const snapshot=()=>({state:LS("gl_state",init()),enc:LS("gl_enc",[]),runs:LS("gl_runs",[]),t:Date.now()});
+function applyCloud(d){if(!d)return;if(Array.isArray(d.state))SV("gl_state",d.state);if(Array.isArray(d.enc))SV("gl_enc",d.enc);if(Array.isArray(d.runs))SV("gl_runs",d.runs)}
+async function archiveRun(){
+ const st=LS("gl_state",null);if(!st)throw new Error("Kein aktueller Stand vorhanden");
+ const kk=t=>t.trim().toLowerCase();
+ const gens=st.map(x=>{
+  const dead=[...dl(x),...(x.ch||[]).filter(c=>c.n.trim()&&!c.a).map(c=>c.n.trim())],seen=new Set(),dd=[],al=[];
+  dead.forEach(n=>{if(!seen.has(kk(n))){seen.add(kk(n));dd.push(n)}});
+  [...(x.team||[]),...bl(x),...(x.ch||[]).filter(c=>c.a).map(c=>c.n)].map(n=>(n||"").trim()).filter(Boolean).forEach(n=>{const k=kk(n);if(!seen.has(k)){seen.add(k);al.push(n)}});
+  return{s:x.s,st:x.st||"",alive:al,dead:dd}});
+ let end=0;gens.forEach((x,i)=>{if(x.s>0||x.alive.length||x.dead.length)end=i});
+ const runs=LS("gl_runs",[]),run={n:runs.length+1,date:new Date().toLocaleDateString("de-DE"),end,gens};
+ const payload={state:init(),enc:[],runs:[...runs,run],t:Date.now()};
+ await cloudPush(payload); // bei Fehler: Abbruch, lokal bleibt alles unverändert
+ SV("gl_state",payload.state);SV("gl_enc",[]);SV("gl_runs",payload.runs);try{localStorage.removeItem("gl_dirty")}catch(e){}}
+
+function AdminBar({onLogin,onRefresh}){
+ const[pw,setPw]=useState(""),[key,setKey]=useState(""),[ok,setOk]=useState(isAdmin()),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[,tick]=useState(0);
+ React.useEffect(()=>{const t=setInterval(()=>tick(x=>x+1),2000);return()=>clearInterval(t)},[]);
+ const login=()=>{
+  if(pw!==ADMIN_PASSWORD){setMsg("Falsches Passwort.");return}
+  if(!wKey()&&!key.trim()){setMsg("Bitte den JSONBin API-Key eingeben.");return}
+  try{sessionStorage.setItem("gl_auth","1");if(key.trim())localStorage.setItem("gl_key",key.trim())}catch(e){}
+  setOk(true);setMsg("");onLogin()};
+ const push=async()=>{setBusy(true);try{await cloudPush(snapshot());localStorage.removeItem("gl_dirty");setMsg("✓ Hochgeladen "+new Date().toLocaleTimeString("de-DE"))}catch(e){setMsg("✗ Upload fehlgeschlagen: "+e.message)}setBusy(false)};
+ const arch=async()=>{if(!confirm("Aktuellen Run archivieren, hochladen und das Dashboard zurücksetzen?"))return;setBusy(true);
+  try{await archiveRun();setMsg("✓ Run archiviert & hochgeladen – Dashboard zurückgesetzt");onRefresh()}catch(e){setMsg("✗ Archivieren fehlgeschlagen: "+e.message+" (nichts wurde verändert)")}setBusy(false)};
+ if(!ok)return h("div",{className:"card p-5 mt-4 max-w-md"},h("div",{className:"font-bold mb-3"},"🔒 Admin-Login"),
+  h("div",{className:"grid gap-2"},
+   h("input",{type:"password",value:pw,onChange:e=>setPw(e.target.value),onKeyDown:e=>e.key=="Enter"&&login(),placeholder:"Passwort",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
+   !wKey()&&h("input",{type:"password",value:key,onChange:e=>setKey(e.target.value),placeholder:"JSONBin API-Key (wird nur in diesem Browser gespeichert)",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
+   h(Btn,{onClick:login},"Anmelden")),h("p",{className:"text-xs text-orange-300 mt-2 min-h-[1rem]"},msg));
+ const dirty=!!localStorage.getItem("gl_dirty");
+ return h("div",{className:"card p-4 mt-4 flex flex-wrap items-center gap-3 border-violet-500/50"},
+  h("span",{className:"font-bold text-violet-300"},"🔓 Admin-Modus"),
+  h(Btn,{disabled:busy,onClick:push},"Änderungen hochladen ☁️"),
+  h(Btn,{disabled:busy,onClick:arch,className:"!border-fuchsia-500/60 !bg-fuchsia-500/10"},"Aktuellen Run archivieren 📦"),
+  dirty&&h("span",{className:"text-xs text-orange-300"},"● ungespeicherte Änderungen"),
+  h("span",{className:"text-xs text-gray-400"},msg))}
+
+function Runs(){
+ const[runs]=useState(()=>LS("gl_runs",[])),[o,setO]=useState(null);
+ return h("div",{className:"mt-6"},h("div",{className:"mb-6"},Lbl("ARCHIV"),h("h2",{className:"text-3xl font-bold"},"Vergangene Runs")),
+  runs.length?h("div",{className:"grid gap-3"},runs.map((r,i)=>{const op=o===i;return h("div",{key:i,className:"card overflow-hidden"},
+   h("button",{onClick:()=>setO(op?null:i),className:"w-full p-5 flex items-center justify-between gap-4 text-left"},
+    h("div",null,h("div",{className:"text-xl font-bold"},"Run "+r.n),h("div",{className:"text-sm text-gray-400"},"Endete in Gen "+pad(r.end)+" – "+G[r.end].name+(r.date?" · "+r.date:""))),
+    h("span",{className:"text-xl text-violet-300 transition-transform "+(op?"rotate-90":"")},"▶")),
+   op&&h("div",{className:"p-5 pt-0 grid gap-4"},r.gens.map((x,gi)=>(x.s>0||x.alive.length||x.dead.length)?h("div",{key:gi,className:"rounded-xl border border-white/10 bg-white/5 p-4"},
+    h("div",{className:"flex flex-wrap justify-between gap-2 mb-3"},h("div",{className:"font-bold"},"Gen "+pad(gi)+" – "+G[gi].name),h("span",{className:"text-xs tracking-widest "+(x.s==2?"text-green-400":"text-violet-300")},["OFFEN","ABGEBROCHEN / LIEF","✓ GESCHAFFT"][x.s])),
+    h("div",{className:"text-xs tracking-widest text-green-400 mb-2"},"🟢 LEBEND ("+x.alive.length+")"),
+    x.alive.length?h("div",{className:"grid gap-2 mb-4",style:GS},x.alive.map((n,k)=>Mini(n,"bg-black/40 border-green-500/30",k))):h("div",{className:"text-sm text-gray-500 mb-4"},"–"),
+    h("div",{className:"text-xs tracking-widest text-red-400 mb-2"},"💀 TOT ("+x.dead.length+")"),
+    x.dead.length?h("div",{className:"grid gap-2",style:GS},x.dead.map((n,k)=>Mini(n,"bg-black/40 border-red-500/30",k))):h("div",{className:"text-sm text-gray-500"},"–")):null)))}))
+  :h("div",{className:"card p-8 text-center text-gray-500"},"Noch keine archivierten Runs."))}
+
+function App(){
+ const[tab,setTab]=useState(0),[open,setOpen]=useState(null),[ver,setVer]=useState(0),[auth,setAuth]=useState(isAdmin()),[st,setSt]=useState("⏳ Lade Live-Daten …");
+ React.useEffect(()=>{let on=true;
+  const load=async()=>{try{const d=await cloudPull();if(!on)return;
+    if(ADMIN_URL&&localStorage.getItem("gl_dirty")){setSt("🟠 Admin: lokale, noch nicht hochgeladene Änderungen");return}
+    applyCloud(d);setVer(v=>v+1);setSt("🟢 Live · "+new Date().toLocaleTimeString("de-DE"))}
+   catch(e){if(on)setSt("⚪ Cloud nicht erreichbar – zeige lokale Daten")}};
+  load();const t=ADMIN_URL?null:setInterval(load,30000);
+  return()=>{on=false;if(t)clearInterval(t)}},[auth]);
+ return h("div",{className:"max-w-5xl mx-auto px-4 pb-16"},
+  ADMIN_URL&&h(AdminBar,{onLogin:()=>setAuth(true),onRefresh:()=>setVer(v=>v+1)}),
+  h("header",{className:"py-5 flex flex-wrap items-center gap-4 justify-between"},
+   h("div",{className:"text-lg font-bold tracking-widest bg-gradient-to-r from-violet-400 via-blue-400 to-fuchsia-500 bg-clip-text text-transparent"},"GENLOCKE//CHALLENGE"),
+   h("nav",{className:"flex gap-1 overflow-x-auto"},TABS.map((t,i)=>(i==3&&!isAdmin())?null:h("button",{key:t,onClick:()=>setTab(i),
+    className:"px-4 py-2 rounded-full text-sm whitespace-nowrap border "+(tab==i?"border-violet-500 text-white bg-violet-500/20 shadow-[0_0_14px_rgba(139,92,246,.5)]":"border-white/10 text-gray-400 hover:text-white")},t)))),
+  h("div",{className:"text-xs text-gray-500 -mt-3 mb-2"},st),
+  tab==1?h(Stand,{key:ver}):tab==4?h(Encounters,{key:ver}):tab==2?h(Graveyard,{key:ver}):tab==5?h(Runs,{key:ver}):tab==3&&isAdmin()?h(Wheels):tab>0?h("div",{className:"card p-12 text-center text-gray-400 mt-8"},TABS[tab]+" – kommt bald."):
+  h("main",null,
+   h("h2",{className:"text-3xl font-bold mt-6 mb-1"},"Die Regeln"),
+   h("p",{className:"text-gray-500 mb-5"},"Sieben Regionen. Keine Gnade."),
+   h("div",{className:"grid gap-4 sm:grid-cols-2 lg:grid-cols-3"},R.map(([ic,t,d])=>h("div",{key:t,className:"card p-5"},
+    h("div",{className:"text-2xl mb-3"},ic),h("h3",{className:"font-bold mb-2 text-violet-300"},t),h("p",{className:"text-sm text-gray-400 leading-relaxed"},d)))),
+   h("h2",{className:"text-3xl font-bold mt-12 mb-1"},"Der Generationenplan"),
+   h("p",{className:"text-gray-500 mb-5"},"Edition anklicken für Level-Caps. ",h("span",{className:"text-white"},"Weiß = Cap"),", ",h("span",{className:"ace"},"Violett = Ace")),
+   h("div",{className:"grid gap-4 sm:grid-cols-2 lg:grid-cols-4"},G.map((g,i)=>h("button",{key:g.name,onClick:()=>setOpen(i),className:"card p-5 text-left"},
+    h("div",{className:"text-xs tracking-widest text-fuchsia-400"},"GEN "+String(i+1).padStart(2,"0")+" · "+g.reg.toUpperCase()),
+    h("div",{className:"text-lg font-bold mt-1"},g.name),
+    h("div",{className:"text-xs text-gray-500 mt-2"},"Forced Evo "+g.fe+" · "+g.rows.length+" Bosse"))))),
+  open!==null&&h(Modal,{g:G[open],i:open,close:()=>setOpen(null)}))}
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));
+</script></body></html>
