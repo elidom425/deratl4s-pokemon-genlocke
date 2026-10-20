@@ -382,7 +382,8 @@ function Encounters(){
 
 const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
 const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
-const wKey=()=>{try{return API_KEY||localStorage.getItem("gl_key")||""}catch(e){return API_KEY}};
+const isP2=()=>getMode()=="duo"&&getPlayer()=="2";
+const wKey=()=>{try{return isP2()?(localStorage.getItem("gl_key_p2")||""):(API_KEY||localStorage.getItem("gl_key")||"")}catch(e){return isP2()?"":API_KEY}};
 const getMode=()=>LS("gl_mode","solo"),getPlayer=()=>String(LS("gl_player","1"));
 const ownKeys=()=>getMode()=="duo"?["gl_state_p"+getPlayer()]:["gl_state","gl_enc"];
 const ALLKEYS=["gl_state","gl_enc","gl_runs","gl_state_p1","gl_state_p2","gl_runs_duo"];
@@ -454,7 +455,7 @@ function applyParty(payload,sk){
  st[cur].team=team;SV(sk,st);try{localStorage.setItem("gl_dirty","1")}catch(e){}return true}
 
 function AdminBar({onLogin,onRefresh,mode,player,setMode,setPlayer,pl,plOn,setPlOn,plRaw}){
- const[pw,setPw]=useState(""),[key,setKey]=useState(""),[ok,setOk]=useState(isAdmin()),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[,tick]=useState(0);
+ const[pw,setPw]=useState(""),[key,setKey]=useState(""),[ok,setOk]=useState(isAdmin()),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[,tick]=useState(0),[k2,setK2]=useState(()=>{try{return localStorage.getItem("gl_key_p2")||""}catch(e){return ""}}),[k1,setK1]=useState("");
  const busyRef=React.useRef(false),nextTry=React.useRef(0);
  React.useEffect(()=>{const t=setInterval(async()=>{tick(x=>x+1);
   if(!isAdmin()||busyRef.current||Date.now()<nextTry.current)return;
@@ -465,7 +466,6 @@ function AdminBar({onLogin,onRefresh,mode,player,setMode,setPlayer,pl,plOn,setPl
   busyRef.current=false},3000);return()=>clearInterval(t)},[]);
  const login=()=>{
   if(pw!==ADMIN_PASSWORD){setMsg("Falsches Passwort.");return}
-  if(!wKey()&&!key.trim()){setMsg("Bitte den JSONBin API-Key eingeben.");return}
   try{sessionStorage.setItem("gl_auth","1");if(key.trim())localStorage.setItem("gl_key",key.trim())}catch(e){}
   setOk(true);setMsg("");onLogin()};
  const push=async()=>{setBusy(true);try{await pushOwn();localStorage.removeItem("gl_dirty");setMsg("✓ Hochgeladen "+new Date().toLocaleTimeString("de-DE"))}catch(e){setMsg("✗ Upload fehlgeschlagen: "+e.message)}setBusy(false)};
@@ -474,7 +474,7 @@ function AdminBar({onLogin,onRefresh,mode,player,setMode,setPlayer,pl,plOn,setPl
  if(!ok)return h("div",{className:"card p-5 mt-4 max-w-md"},h("div",{className:"font-bold mb-3"},"🔒 Admin-Login"),
   h("div",{className:"grid gap-2"},
    h("input",{type:"password",value:pw,onChange:e=>setPw(e.target.value),onKeyDown:e=>e.key=="Enter"&&login(),placeholder:"Passwort",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
-   !wKey()&&h("input",{type:"password",value:key,onChange:e=>setKey(e.target.value),placeholder:"JSONBin API-Key (wird nur in diesem Browser gespeichert)",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
+   !wKey()&&h("input",{type:"password",value:key,onChange:e=>setKey(e.target.value),placeholder:"JSONBin Key (Solo/Spieler 1; Spieler 2 trägt seinen Access Key danach im Menü ein)",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
    h(Btn,{onClick:login},"Anmelden")),h("p",{className:"text-xs text-orange-300 mt-2 min-h-[1rem]"},msg));
  const dirty=!!localStorage.getItem("gl_dirty");
  const seg=(on,t,f)=>h("button",{onClick:f,className:"px-4 py-2 rounded-lg text-sm font-bold border "+(on?"border-fuchsia-500 bg-fuchsia-500/20 text-white":"border-white/15 text-gray-400 hover:text-white")},t);
@@ -485,6 +485,13 @@ function AdminBar({onLogin,onRefresh,mode,player,setMode,setPlayer,pl,plOn,setPl
    dirty&&h("span",{className:"text-xs text-orange-300"},"● ungespeicherte Änderungen"),h("span",{className:"text-xs text-gray-400"},msg)),
   h("div",{className:"flex flex-wrap items-center gap-2"},seg(mode=="solo","Modus: Solo-Run",()=>setMode("solo")),seg(mode=="duo","Modus: Duo-Run",()=>setMode("duo")),
    mode=="duo"&&h("div",{className:"flex gap-4 ml-2 text-sm"},["1","2"].map(n=>h("label",{key:n,className:"flex items-center gap-2 cursor-pointer"},h("input",{type:"radio",name:"pl",checked:player==n,onChange:()=>setPlayer(n)}),"Ich bin Spieler "+n)))),
+  mode=="duo"&&player=="2"&&h("div",{className:"grid gap-1"},
+   h("label",{className:"text-xs tracking-widest text-fuchsia-300"},"JSONBin Access Key für Spieler 2"),
+   h("input",{type:"password",value:k2,onChange:e=>{setK2(e.target.value);try{localStorage.setItem("gl_key_p2",e.target.value.trim())}catch(x){}},placeholder:"Access Key mit Read + Update (wird nur in diesem Browser gespeichert)",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-fuchsia-500"}),
+   !k2.trim()&&h("span",{className:"text-xs text-orange-300"},"⚠ Ohne Access Key kann Spieler 2 nichts hochladen.")),
+  !(mode=="duo"&&player=="2")&&!wKey()&&h("div",{className:"grid gap-1"},
+   h("label",{className:"text-xs tracking-widest text-violet-300"},"JSONBin Key (Solo / Spieler 1)"),
+   h("input",{type:"password",value:k1,onChange:e=>{setK1(e.target.value);try{localStorage.setItem("gl_key",e.target.value.trim())}catch(x){}},placeholder:"Master- oder Access-Key",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"})),
   h("div",{className:"flex flex-wrap items-center gap-3 text-sm"},h("label",{className:"flex items-center gap-2 cursor-pointer"},h("input",{type:"checkbox",checked:plOn,onChange:e=>setPlOn(e.target.checked)}),"Pokélink verwenden"),h("span",{className:"text-gray-400"},pl)),
   plRaw&&h("details",{className:"text-xs text-gray-500"},h("summary",{className:"cursor-pointer"},"Pokélink-Diagnose (letztes Event)"),h("pre",{className:"whitespace-pre-wrap break-all mt-1"},plRaw)))}
 
@@ -544,10 +551,10 @@ function App(){
  React.useEffect(()=>{
   if(!auth||!plOn){setPl("⚪ Pokélink: aus");return}
   if(typeof io!=="function"){setPl("⚪ Pokélink: Client nicht geladen");return}
-  let sock;try{sock=io("http://localhost:14848/",{transports:["websocket"],reconnectionDelay:5000,reconnectionDelayMax:15000,timeout:4000})}catch(e){setPl("⚪ Pokélink: Verbindung nicht möglich");return}
+  let sock;try{sock=io("http://localhost:3000/",{transports:["websocket"],reconnectionDelay:5000,reconnectionDelayMax:15000,timeout:4000})}catch(e){setPl("⚪ Pokélink: Verbindung nicht möglich");return}
   const sk=getMode()=="duo"?"gl_state_p"+getPlayer():"gl_state";
   const onEv=p=>{try{const r=applyParty(p,sk);if(r===true){setVer(v=>v+1);setPl("🟢 Pokélink: Team aktualisiert "+new Date().toLocaleTimeString("de-DE"))}else if(typeof r=="string")setPl("🟠 Pokélink: "+r)}catch(e){console.warn("Pokélink:",e)}};
-  sock.on("connect",()=>setPl("🟢 Pokélink verbunden"));sock.on("disconnect",()=>setPl("⚪ Pokélink getrennt"));sock.on("connect_error",()=>setPl("⚪ Pokélink nicht gestartet (localhost:14848)"));
+  sock.on("connect",()=>setPl("🟢 Pokélink verbunden"));sock.on("disconnect",()=>setPl("⚪ Pokélink getrennt"));sock.on("connect_error",()=>setPl("⚪ Pokélink nicht gestartet (localhost:3000)"));
   ["client:party:updated","party","client:players:list"].forEach(ev=>sock.on(ev,onEv));
   if(sock.onAny)sock.onAny((ev,...a)=>{try{setPlRaw(ev+": "+JSON.stringify(a).slice(0,400))}catch(e){}});
   return()=>{try{sock.close()}catch(e){}}},[auth,plOn,mode,player]);
