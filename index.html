@@ -5,7 +5,6 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -120,24 +119,22 @@ function Platscher(){
   h("div",{className:"grid gap-2"},sl.map((v,i)=>h("div",{key:i,className:"card px-4 py-3 flex justify-between items-center"},
    h("span",{className:"text-gray-400"},"Team-Slot "+(i+1)),h("span",{className:v?"ace text-2xl":"text-gray-600"},v||"–")))))}
 
-function pull(alive,sel){
- let g;try{g=JSON.parse(localStorage.getItem("gl_state"))}catch(e){}
- if(!g||g.length!=G.length)g=init();
- const all=[];
- g.forEach((x,i)=>{
+function pull(alive,sel,pool){
+ const sts=pool=="duo"?[LS("gl_state_p1",null),LS("gl_state_p2",null)]:[LS("gl_state",null)],all=[];
+ sts.forEach(g=>{if(!Array.isArray(g)||g.length!=G.length)return;g.forEach((x,i)=>{
   if(alive){
    const dead=new Set([...dl(x),...(x.ch||[]).filter(c=>!c.a).map(c=>c.n)].map(n=>(n||"").trim().toLowerCase()));
    const add=l=>l.forEach(n=>{if(n&&!dead.has(n.trim().toLowerCase()))all.push(n)});
    if(sel=="cur"){if(x.s==1){add(x.team);add(bl(x))}}
    else if(i==+sel){if(x.s==1)add(x.team);if(x.s==2)add(x.ch.filter(c=>c.a).map(c=>c.n));add(bl(x))}}
-  else if(i==+sel){dl(x).forEach(n=>all.push(n));x.ch.filter(c=>!c.a).forEach(c=>all.push(c.n))}});
+  else if(i==+sel){dl(x).forEach(n=>all.push(n));x.ch.filter(c=>!c.a).forEach(c=>all.push(c.n))}})});
  const seen=new Set();
  return all.map(n=>n.trim()).filter(n=>{const k=n.toLowerCase();if(!n||seen.has(k))return false;seen.add(k);return true})}
 const Sel=({v,on,cur})=>h("select",{value:v,onChange:e=>on(e.target.value),className:"px-3 py-2 rounded-lg text-sm bg-black border border-white/20 min-w-0 flex-1"},
  (cur?[h("option",{key:"c",value:"cur"},"Aktuelle Gen")]:[]).concat(G.map((g,i)=>h("option",{key:i,value:i},"Gen "+pad(i)+" – "+g.name))));
-function Universal(){
+function Universal({pool}){
  const[l,setL]=useState([]),[v,setV]=useState(""),[res,setRes]=useState(""),[msg,setMsg]=useState(""),[sa,setSa]=useState("cur"),[sd,setSd]=useState("0");
- const imp=(a,sel)=>{const p=pull(a,sel);setL(p);setRes("");const lab=sel=="cur"?"der aktuellen Gen":"Gen "+pad(+sel);setMsg(p.length?p.length+(a?" lebende":" tote")+" Pokémon aus "+lab+" importiert.":"Keine "+(a?"lebenden":"toten")+" Pokémon in "+lab+" gefunden.")};
+ const imp=(a,sel)=>{const p=pull(a,sel,pool);setL(p);setRes("");const lab=(sel=="cur"?"der aktuellen Gen":"Gen "+pad(+sel))+(pool=="duo"?" (Duo-Pool)":" (Solo-Pool)");setMsg(p.length?p.length+(a?" lebende":" tote")+" Pokémon aus "+lab+" importiert.":"Keine "+(a?"lebenden":"toten")+" Pokémon in "+lab+" gefunden.")};
  const add=()=>{const t=v.trim();if(t){setL([...l,t]);setV("");setRes("")}};
  return h("div",{className:"grid gap-8 md:grid-cols-2 items-start"},
   h("div",null,
@@ -156,18 +153,20 @@ function Universal(){
   h("div",null,h(Wheel,{items:l,pics:true,onResult:t=>setRes(t)}),h(Res,{t:res,pic:true})))}
 
 function Wheels(){
- const[s,setS]=useState(0),T=["Phoadsen Rad","Platscher Rad","Universelles Pokémon Rad"];
+ const[s,setS]=useState(0),[pool,setPool]=useState("solo"),T=["Phoadsen Rad","Platscher Rad","Universelles Pokémon Rad"];
+ const pb=(k,t)=>h("button",{onClick:()=>setPool(k),className:"px-4 py-2 rounded-lg text-sm font-bold border "+(pool==k?"border-violet-500 bg-violet-500/20 text-white":"border-white/15 text-gray-400 hover:text-white")},t);
  return h("div",{className:"mt-6"},h("h2",{className:"text-3xl font-bold mb-4"},"Glücksrad"),
-  h("div",{className:"flex gap-2 mb-8 overflow-x-auto"},T.map((t,i)=>h("button",{key:t,onClick:()=>setS(i),className:"px-4 py-2 rounded-lg text-sm whitespace-nowrap border "+(s==i?"border-fuchsia-500 bg-fuchsia-500/20 text-white":"border-white/10 text-gray-400 hover:text-white")},t))),
-  s==0?h(Phoadsen):s==1?h(Platscher):h(Universal))}
+  h("div",{className:"flex gap-2 mb-4 overflow-x-auto"},T.map((t,i)=>h("button",{key:t,onClick:()=>setS(i),className:"px-4 py-2 rounded-lg text-sm whitespace-nowrap border "+(s==i?"border-fuchsia-500 bg-fuchsia-500/20 text-white":"border-white/10 text-gray-400 hover:text-white")},t))),
+  s==2&&h("div",{className:"flex items-center gap-2 mb-8"},pb("solo","Solo-Pool"),pb("duo","Duo-Pool"),h("span",{className:"text-xs text-gray-500"},pool=="duo"?"Pokémon aus den Duo-Boxen (Spieler 1 + 2)":"Pokémon aus den Solo-Boxen")),
+  s==0?h(Phoadsen):s==1?h(Platscher):h(Universal,{pool,key:pool}))}
 
 const init=()=>G.map((g,i)=>({s:i?0:1,st:"",team:Array(6).fill(""),dt:"",ch:Array.from({length:6},()=>({n:"",a:true})),box:""}));
 const dl=x=>x.dt.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);
 const bl=x=>(x.box||"").split(/[,\n]/).map(t=>t.trim()).filter(Boolean);
-function syncEnc(){try{
+function syncEnc(sk,ek){sk=sk||"gl_state";ek=ek||"gl_enc";try{
  if(!isAdmin())return;
- const g=JSON.parse(localStorage.getItem("gl_state"));if(!Array.isArray(g))return;
- let l=[];try{const v=JSON.parse(localStorage.getItem("gl_enc"));if(Array.isArray(v))l=v.map(x=>typeof x=="string"?{n:x,f:"",g:"",r:false}:{g:"",r:false,...x})}catch(e){}
+ const g=JSON.parse(localStorage.getItem(sk));if(!Array.isArray(g))return;
+ let l=[];try{const v=JSON.parse(localStorage.getItem(ek));if(Array.isArray(v))l=v.map(x=>typeof x=="string"?{n:x,f:"",g:"",r:false}:{g:"",r:false,...x})}catch(e){}
  const kk=t=>t.trim().toLowerCase(),n0=l.length,found=[];
  g.forEach((x,i)=>{[...(x.team||[]),...bl(x),...dl(x),...(x.ch||[]).map(c=>c.n)].map(n=>(n||"").trim()).filter(Boolean).forEach(n=>found.push([n,i]))});
  const cur=new Set(found.map(([n])=>kk(n)));
@@ -175,7 +174,7 @@ function syncEnc(){try{
  l=l.filter(e=>e.f||e.r||cur.has(kk(e.n))||!l.some(o=>o!==e&&kk(o.n).length>kk(e.n).length&&kk(o.n).startsWith(kk(e.n))));
  const seen=new Set(l.map(x=>kk(x.n)));let ch=l.length!=n0;
  found.forEach(([n,i])=>{const k=kk(n);if(!seen.has(k)){seen.add(k);l.push({n,f:"",g:String(i),r:false});ch=true}});
- if(ch){localStorage.setItem("gl_enc",JSON.stringify(l));localStorage.setItem("gl_dirty","1")}}catch(e){}}
+ if(ch){localStorage.setItem(ek,JSON.stringify(l));localStorage.setItem("gl_dirty","1")}}catch(e){}}
 const SL=["NOCH OFFEN","LÄUFT GERADE","GESCHAFFT"],pad=i=>String(i+1).padStart(2,"0");
 const SP=80,SPL=148; // SP = Norm-Sprite, SPL = große Kacheln (Team/Champ/Starter) // einheitliche Sprite-Größe (px) für die gesamte App
 const Fb=(n,sz)=>h("div",{className:"shrink-0 rounded-lg grid place-items-center font-bold text-white bg-gradient-to-br from-violet-600/60 to-blue-600/40 border border-white/15",style:{width:sz,height:sz,fontSize:sz/2.2}},(n||"?")[0].toUpperCase());
@@ -237,8 +236,9 @@ schlingking=guzzlord,venicro=poipole,agoyon=naganadel,muramura=stakataka,kopplos
 tarnpignon=foongus
 `;
 const K=t=>(t||"").toLowerCase().replace(/♀/g,"f").replace(/♂/g,"m").replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
-const pokemonTranslations={},ENS=new Set(),EN2DE={};
-DEX.trim().split(/[,\s]+/).forEach(p=>{const[d,e]=p.split("=");const en=K(e||d);pokemonTranslations[K(d)]=en;ENS.add(en);if(e)EN2DE[en]=d});
+const pokemonTranslations={},ENS=new Set();
+DEX.trim().split(/[,\s]+/).forEach(p=>{const[d,e]=p.split("=");const en=K(e||d);pokemonTranslations[K(d)]=en;ENS.add(en)});
+const NAMES=[...new Set(DEX.trim().split(/[,\s]+/).map(p=>p.split("=")[0]).filter(Boolean).map(d=>d.charAt(0).toUpperCase()+d.slice(1)))].sort((a,b)=>a.localeCompare(b,"de"));
 const spriteId=n=>{const k=K(n);return pokemonTranslations[k]||(ENS.has(k)?k:null)};
 function Pic({n,sz}){
  const id=spriteId(n),[bad,setBad]=useState(false);
@@ -254,10 +254,10 @@ const Deaths=l=>h("div",{className:"flex rounded-xl border border-red-500/30 bg-
 const StarterBox=n=>h("div",{className:"card px-5 py-3 flex items-center gap-4"},
  h("div",{className:"relative shrink-0"},h("div",{className:"rounded-full border border-white/10 bg-white/5 grid place-items-center",style:{width:88,height:88}},Av(n,SPS)),h("span",{className:"absolute -top-1 -right-1 text-violet-400"},"★")),
  h("div",{className:"min-w-0"},Lbl("STARTER"),h("div",{className:"text-3xl font-bold capitalize"},n||"–")));
-const Inp=({v,on,ph})=>h("input",{value:v,onChange:e=>on(e.target.value),placeholder:ph,className:"w-full min-w-0 px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/15 outline-none focus:border-violet-500"});
+const Inp=({v,on,ph})=>h("input",{list:"pkmn",value:v,onChange:e=>on(e.target.value),placeholder:ph,className:"w-full min-w-0 px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/15 outline-none focus:border-violet-500"});
 
 const CInp=({v,on,ph})=>{const[t,setT]=useState(v);React.useEffect(()=>{setT(v)},[v]);
- return h("input",{value:t,onChange:e=>setT(e.target.value),onBlur:()=>{if(t!==v)on(t)},onKeyDown:e=>{if(e.key=="Enter")e.target.blur()},placeholder:ph,className:"w-full min-w-0 px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/15 outline-none focus:border-violet-500"})};
+ return h("input",{list:"pkmn",value:t,onChange:e=>setT(e.target.value),onBlur:()=>{if(t!==v)on(t)},onKeyDown:e=>{if(e.key=="Enter")e.target.blur()},placeholder:ph,className:"w-full min-w-0 px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/15 outline-none focus:border-violet-500"})};
 const CTa=({v,on,ph})=>{const[t,setT]=useState(v);React.useEffect(()=>{setT(v)},[v]);
  return h("textarea",{value:t,onChange:e=>setT(e.target.value),onBlur:()=>{if(t!==v)on(t)},rows:2,placeholder:ph,className:"w-full mt-2 px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/15 outline-none focus:border-red-500"})};
 const BoxView=x=>h("details",{className:"mb-4 rounded-xl border border-white/10 bg-white/5 p-3"},h("summary",{className:"cursor-pointer font-bold text-lg"},"📦 Meine Box ("+bl(x).length+" Pokémon)"),
@@ -269,7 +269,7 @@ function Stand({sk="gl_state",canEdit=false,title="Der Stand der Challenge"}){
  const boxEd=(i,x)=>h("div",{className:"mt-4"},Lbl("POKÉMON AUF DER BOX REGISTRIEREN"),
     h("div",{className:"flex gap-2 mt-2"},h(Inp,{v:bv,ph:"Name der Box-Pokémon…",on:setBv}),h(Btn,{onClick:()=>addBox(i)},"Hinzufügen")),
     h("div",{className:"flex flex-wrap gap-2 mt-2"},bl(x).map((n,k)=>h("span",{key:k,className:"px-2 py-1 rounded-md text-xs bg-white/5 border border-white/15 flex items-center gap-1"},n,h("button",{onClick:()=>up(i,{box:bl(x).filter((_,m)=>m!=k).join(", ")}),className:"text-fuchsia-400"},"✕")))));
- React.useEffect(()=>{if(!canEdit||!isAdmin())return;try{const nv=JSON.stringify(g);if(localStorage.getItem(sk)!==nv){localStorage.setItem(sk,nv);localStorage.setItem("gl_dirty","1")}}catch(e){}if(sk==="gl_state")syncEnc()},[g]);
+ React.useEffect(()=>{if(!canEdit||!isAdmin())return;try{const nv=JSON.stringify(g);if(localStorage.getItem(sk)!==nv){localStorage.setItem(sk,nv);localStorage.setItem("gl_dirty","1")}}catch(e){}syncEnc(sk,sk==="gl_state"?"gl_enc":"gl_enc_p"+sk.slice(-1))},[g]);
  const up=(i,p)=>setG(a=>a.map((x,j)=>j==i?{...x,...p}:x));
  const cur=g.findIndex(x=>x.s==1),done=g.map((x,i)=>i).filter(i=>g[i].s==2);
  const DT=(i,t)=>h(CTa,{v:g[i].dt,on:v=>up(i,{dt:v}),ph:t});
@@ -330,63 +330,72 @@ function Graveyard(){
     h("div",{className:"text-xs text-gray-500 mt-1"},"Gefallen in: Gen "+pad(d.i)+" - "+G[d.i].name))))):
   h("div",{className:"card p-12 text-center text-gray-400"},h("div",{className:"text-4xl mb-3"},"🕯️"),"Noch keine Verluste in diesem Run. Möge Arceus dein Team beschützen!"))}
 
-function Encounters(){
- const[l,setL]=useState(()=>{syncEnc();try{const v=JSON.parse(localStorage.getItem("gl_enc"));if(Array.isArray(v))return v.map(x=>typeof x=="string"?{n:x,f:"",g:"",r:false}:{g:"",r:false,...x})}catch(e){}return[]});
- const[q,setQ]=useState(""),[nv,setNv]=useState(""),[fv,setFv]=useState(""),[msg,setMsg]=useState(""),[el,setEl]=useState(null),[ev,setEv]=useState(""),[fg,setFg]=useState("all"),[fo,setFo]=useState(false),[gv,setGv]=useState(()=>{try{const i=JSON.parse(localStorage.getItem("gl_state")).findIndex(x=>x.s==1);return i<0?"":String(i)}catch(e){return ""}});
- React.useEffect(()=>{if(!isAdmin())return;try{const nv=JSON.stringify(l);if(localStorage.getItem("gl_enc")!==nv){localStorage.setItem("gl_enc",nv);localStorage.setItem("gl_dirty","1")}}catch(e){}},[l]);
+function Encounters({scope}){
+ const duo=scope=="duo",P=getPlayer(),own=duo?P:"0",mine=isAdmin()&&(duo?getMode()=="duo":getMode()=="solo");
+ const ekOf=p=>p=="0"?"gl_enc":"gl_enc_p"+p,skOf=p=>p=="0"?"gl_state":"gl_state_p"+p;
+ const norm=v=>Array.isArray(v)?v.map(x=>typeof x=="string"?{n:x,f:"",g:"",r:false}:{g:"",r:false,...x}):[];
+ const[ls,setLs0]=useState(()=>{if(mine)syncEnc(skOf(own),ekOf(own));const o={};(duo?["1","2"]:["0"]).forEach(p=>{o[p]=norm(LS(ekOf(p),[]))});return o});
+ const setLs=(p,fn)=>setLs0(s=>({...s,[p]:fn(s[p])}));
+ const[q,setQ]=useState(""),[nv,setNv]=useState(""),[fv,setFv]=useState(""),[msg,setMsg]=useState(""),[el,setEl]=useState(null),[ev,setEv]=useState(""),[fg,setFg]=useState("all"),[fo,setFo]=useState(false),[gv,setGv]=useState(()=>{const i=(LS(skOf(own),[])||[]).findIndex(x=>x.s==1);return i<0?"":String(i)});
+ React.useEffect(()=>{if(!mine)return;try{const k=ekOf(own),nvv=JSON.stringify(ls[own]);if(JSON.stringify(norm(LS(k,[])))!==nvv){localStorage.setItem(k,nvv);localStorage.setItem("gl_dirty","1")}}catch(e){}},[ls]);
  const key=t=>t.trim().toLowerCase(),toks=f=>f.split(",").map(key).filter(Boolean),names=e=>[key(e.n),...toks(e.f)];
- const saveLine=e=>{setL(l.map(x=>x===e?{...x,f:ev.trim()}:x));setEl(null)};
- const add=()=>{const t=nv.trim(),f=fv.trim();if(!t)return;const ex=l.find(x=>key(x.n)==key(t));
-  if(ex){if(f){setL(l.map(x=>x===ex?{...x,f}:x));setMsg("Familie von "+ex.n+" aktualisiert.");setFv("")}else setMsg(t+" ist bereits registriert.");return}
-  setL([...l,{n:t,f,g:gv,r:false}]);setNv("");setFv("");setMsg(t+" eingetragen"+(f?" (Familie: "+f+").":"."))};
- const groups=(()=>{const gs=[];l.forEach(e=>{const m={s:new Set(names(e)),m:[e]};gs.filter(g=>[...m.s].some(k=>g.s.has(k))).forEach(g=>{g.s.forEach(k=>m.s.add(k));m.m.push(...g.m);gs.splice(gs.indexOf(g),1)});gs.push(m)});return gs})();
- const qq=key(q),exact=l.find(x=>key(x.n)==qq),grp=qq&&!exact?groups.find(g=>g.s.has(qq)):null;
+ const all=Object.keys(ls).flatMap(p=>ls[p].map(e=>({...e,pl:p,src:e}))),can=e=>mine&&e.pl==own,id=e=>e.pl+"|"+e.n;
+ const saveLine=e=>{setLs(e.pl,a=>a.map(x=>x===e.src?{...x,f:ev.trim()}:x));setEl(null)};
+ const add=()=>{const t=nv.trim(),f=fv.trim();if(!t)return;const ex=all.find(x=>key(x.n)==key(t));
+  if(ex){if(can(ex)&&f){setLs(own,a=>a.map(x=>x===ex.src?{...x,f}:x));setMsg("Familie von "+ex.n+" aktualisiert.");setFv("")}else setMsg(t+" ist bereits registriert"+(duo?" (Spieler "+ex.pl+")":"")+".");return}
+  setLs(own,a=>[...a,{n:t,f,g:gv,r:false}]);setNv("");setFv("");setMsg(t+" eingetragen"+(f?" (Familie: "+f+").":"."))};
+ const groups=(()=>{const gs=[];all.forEach(e=>{const m={s:new Set(names(e)),m:[e]};gs.filter(g=>[...m.s].some(k=>g.s.has(k))).forEach(g=>{g.s.forEach(k=>m.s.add(k));m.m.push(...g.m);gs.splice(gs.indexOf(g),1)});gs.push(m)});return gs})();
+ const qq=key(q),exact=all.find(x=>key(x.n)==qq),grp=qq&&!exact?groups.find(g=>g.s.has(qq)):null;
  const hitG=exact?groups.find(g=>g.m.includes(exact)):grp,unl=hitG&&hitG.m.some(x=>x.r);
  const lab=grp?(grp.m.find(x=>x.f)?grp.m.find(x=>x.f).f.split(",")[0].trim():grp.m[0].n):"";
- const sug=qq.length>=3?l.filter(x=>x!==exact&&!(grp&&grp.m.includes(x))&&names(x).some(k=>k.length>=3&&(k.includes(qq)||qq.includes(k)))):[];
- const sorted=l.filter(e=>fg=="all"||(fg=="none"?e.g==="":e.g===fg)).sort((a,b)=>a.n.localeCompare(b.n,"de"));
- const hl=n=>qq&&names(n).some(k=>k.includes(qq));
- const neon=(c,t)=>({textShadow:"0 0 14px "+c});
+ const sug=qq.length>=3?all.filter(x=>x!==exact&&!(grp&&grp.m.includes(x))&&names(x).some(k=>k.length>=3&&(k.includes(qq)||qq.includes(k)))):[];
+ const sorted=all.filter(e=>fg=="all"||(fg=="none"?e.g==="":e.g===fg)).sort((a,b)=>a.n.localeCompare(b.n,"de"));
+ const hl=n=>qq&&names(n).some(k=>k.includes(qq)),who=e=>duo?" (Spieler "+e.pl+")":"";
+ const neon=c=>({textShadow:"0 0 14px "+c});
  return h("div",{className:"mt-6"},
-  h("div",{className:"mb-6 flex flex-wrap justify-between items-end gap-3"},h("div",null,Lbl("DUPES CLAUSE"),h("h2",{className:"text-3xl font-bold"},"Encounter-Datenbank")),
+  h("div",{className:"mb-6 flex flex-wrap justify-between items-end gap-3"},h("div",null,Lbl("DUPES CLAUSE · "+(duo?"DUO":"SOLO")),h("h2",{className:"text-3xl font-bold"},"Encounter-Datenbank")),
    h(Btn,{onClick:()=>setFo(!fo)},"Nach Generation filtern 🗂️"+(fg!="all"?" · aktiv":""))),
   fo&&h("div",{className:"flex flex-wrap gap-2 mb-5"},[["all","Alle"]].concat(G.map((g,i)=>[String(i),"Gen "+pad(i)+" - "+g.name]),[["none","Ohne Gen"]]).map(([k,t])=>h("button",{key:k,onClick:()=>setFg(k),className:"px-3 py-1.5 rounded-full text-xs border "+(fg==k?"border-fuchsia-500 bg-fuchsia-500/20 text-white":"border-white/15 text-gray-400 hover:text-white")},t))),
   h("input",{value:q,onChange:e=>setQ(e.target.value),placeholder:"Pokémon suchen... 🔍",className:"w-full px-5 py-4 text-xl rounded-2xl bg-white/5 border border-violet-500/50 outline-none focus:border-fuchsia-500 focus:shadow-[0_0_24px_rgba(217,70,239,.35)]"}),
   h("div",{className:"grid gap-4 md:grid-cols-2 mt-5"},
-   isAdmin()&&h("div",{className:"card p-5"},h("h3",{className:"font-bold text-violet-300 mb-3"},"Neues Pokémon registrieren"),
+   mine&&h("div",{className:"card p-5"},h("h3",{className:"font-bold text-violet-300 mb-3"},"Neues Pokémon registrieren"+(duo?" (Spieler "+P+")":"")),
     h("div",{className:"grid gap-2"},
-     h("input",{value:nv,onChange:e=>{setNv(e.target.value);setMsg("")},onKeyDown:e=>e.key=="Enter"&&add(),placeholder:"Pokémon-Name… (z.B. Glutexo)",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
+     h("input",{list:"pkmn",value:nv,onChange:e=>{setNv(e.target.value);setMsg("")},onKeyDown:e=>e.key=="Enter"&&add(),placeholder:"Pokémon-Name… (z.B. Glutexo)",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
      h("input",{value:fv,onChange:e=>setFv(e.target.value),onKeyDown:e=>e.key=="Enter"&&add(),placeholder:"Entwicklungs-Linie / Familie (optional) – z.B. Glumanda, Glurak",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"}),
      h("select",{value:gv,onChange:e=>setGv(e.target.value),className:"px-3 py-2 rounded-lg text-sm bg-black border border-white/20"},[h("option",{key:"x",value:""},"Generation (optional)")].concat(G.map((g,i)=>h("option",{key:i,value:String(i)},"Gen "+pad(i)+" - "+g.name)))),
      h(Btn,{onClick:add},"Als Encounter eintragen")),
     h("p",{className:"text-xs text-gray-500 mt-2 min-h-[1rem]"},msg)),
-   h("div",{className:"card p-5 flex flex-col justify-center text-center min-h-[130px]"},h("h3",{className:"font-bold text-violet-300 mb-3"},"Live Dupes-Check"),
+   h("div",{className:"card p-5 flex flex-col justify-center text-center min-h-[130px]"},h("h3",{className:"font-bold text-violet-300 mb-3"},"Live Dupes-Check"+(duo?" · Duo":" · Solo")),
     !qq?h("div",{className:"text-gray-500"},"Tippe oben einen Namen ein."):
     unl?h("div",null,h("div",{className:"text-2xl font-bold text-green-400",style:neon("rgba(74,222,128,.9)")},"🟢 GÜLTIGER ENCOUNTER (Reihe durch Revive freigeschaltet!)"),h("div",{className:"text-sm text-gray-300 mt-1"},"Revived 🔄: "+hitG.m.filter(x=>x.r).map(x=>x.n).join(", "))):
-    exact?h("div",null,h("div",{className:"text-2xl font-bold text-red-400",style:neon("rgba(248,113,113,.9)")},"🔴 DUPLIKAT (Bereits gefangen!)"),h("div",{className:"text-sm text-gray-400 mt-1"},"Gültig für einen Reroll")):
-    grp?h("div",null,h("div",{className:"text-2xl font-bold text-orange-400",style:neon("rgba(251,146,60,.9)")},"🟠 LINIEN-DUPLIKAT (Familie bereits gefangen!)"),h("div",{className:"text-sm text-gray-300 mt-1"},"Aus der "+lab+"-Reihe gefangen: "+grp.m.map(x=>x.n).join(", ")+(grp.m.some(x=>x.f)?" · Linie: "+[...new Set(grp.m.filter(x=>x.f).map(x=>x.f))].join(" | "):""))):
+    exact?h("div",null,h("div",{className:"text-2xl font-bold text-red-400",style:neon("rgba(248,113,113,.9)")},"🔴 DUPLIKAT (Bereits gefangen!)"),h("div",{className:"text-sm text-gray-400 mt-1"},"Gültig für einen Reroll"+who(exact))):
+    grp?h("div",null,h("div",{className:"text-2xl font-bold text-orange-400",style:neon("rgba(251,146,60,.9)")},"🟠 LINIEN-DUPLIKAT (Familie bereits gefangen!)"),h("div",{className:"text-sm text-gray-300 mt-1"},"Aus der "+lab+"-Reihe gefangen: "+grp.m.map(x=>x.n+who(x)).join(", ")+(grp.m.some(x=>x.f)?" · Linie: "+[...new Set(grp.m.filter(x=>x.f).map(x=>x.f))].join(" | "):""))):
     h("div",{className:"text-2xl font-bold text-green-400",style:neon("rgba(74,222,128,.9)")},"🟢 GÜLTIGER ENCOUNTER"),
     sug.length>0&&h("div",{className:"mt-3 text-xs text-yellow-300"},"Mögliche Treffer (Namensähnlichkeit): ",sug.map(x=>x.n+(x.f?" ("+x.f+")":"")).join(" · ")))),
-  h("h3",{className:"text-2xl font-bold mt-10 mb-3 pb-2 border-b border-white/10 flex justify-between items-end"},"Alle registrierten Pokémon",h("span",{className:"text-xs tracking-widest text-gray-500"},(fg=="all"?l.length:sorted.length+" VON "+l.length)+" GEFANGEN")),
-  sorted.length?h("div",{className:"grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-h-[480px] overflow-y-auto pr-1"},sorted.map(e=>h("div",{key:e.n,className:"rounded-lg border px-3 py-2 "+(hl(e)?"border-fuchsia-500 bg-fuchsia-500/10":"border-white/10 bg-white/5")},
+  h("h3",{className:"text-2xl font-bold mt-10 mb-3 pb-2 border-b border-white/10 flex justify-between items-end"},"Alle registrierten Pokémon",h("span",{className:"text-xs tracking-widest text-gray-500"},(fg=="all"?all.length:sorted.length+" VON "+all.length)+" GEFANGEN")),
+  sorted.length?h("div",{className:"grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-h-[480px] overflow-y-auto pr-1"},sorted.map(e=>h("div",{key:id(e),className:"rounded-lg border px-3 py-2 "+(hl(e)?"border-fuchsia-500 bg-fuchsia-500/10":"border-white/10 bg-white/5")},
    h("div",{className:"flex items-start justify-between gap-2"},
     h("div",{className:"min-w-0"},h("div",{className:"truncate font-bold"},e.n),e.f&&h("div",{className:"text-[11px] text-orange-300/80 truncate"},"Familie: "+e.f),
-     h("div",{className:"text-[11px] text-gray-500"},e.g!==""?"Gen "+pad(+e.g)+" - "+G[+e.g].name:"Ohne Gen")),
+     h("div",{className:"text-[11px] text-gray-500"},(e.g!==""?"Gen "+pad(+e.g)+" - "+G[+e.g].name:"Ohne Gen")+(duo?" · Spieler "+e.pl:""))),
     h("div",{className:"flex items-center gap-2"},h("span",{className:"text-[10px] px-2 py-0.5 rounded-full border "+(e.r?"border-green-500/60 text-green-400":"border-violet-500/50 text-violet-300")},e.r?"Revived 🔄":"Aktiv"),
-     isAdmin()&&h("button",{onClick:()=>setL(l.filter(x=>x!==e)),className:"text-fuchsia-400 hover:text-white px-1","aria-label":"Löschen"},"✕"))),
-   isAdmin()&&h("div",{className:"mt-2 flex flex-wrap gap-x-4 gap-y-1"},
-    h("button",{onClick:()=>setL(l.map(x=>x===e?{...x,r:!x.r}:x)),className:"text-xs text-gray-300 hover:text-white underline decoration-dotted"},e.r?"Zurück auf Aktiv setzen":"Als wiederbelebt markieren 🔄"),
-    h("button",{onClick:()=>{setEl(el===e.n?null:e.n);setEv(e.f)},className:"text-xs text-orange-300 hover:text-white underline decoration-dotted"},"Linie bearbeiten ✏️")),
-   isAdmin()&&el===e.n&&h("div",{className:"mt-2 flex gap-2"},h("input",{value:ev,autoFocus:true,onChange:k=>setEv(k.target.value),onKeyDown:k=>k.key=="Enter"&&saveLine(e),placeholder:"z.B. Glumanda, Glutexo, Glurak",className:"flex-1 min-w-0 px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-orange-400/50 outline-none"}),h(Btn,{onClick:()=>saveLine(e)},"OK"))))):
-  h("div",{className:"card p-8 text-center text-gray-500"},l.length?"Keine Fänge in dieser Auswahl.":"Noch keine Encounter registriert."))}
+     can(e)&&h("button",{onClick:()=>setLs(e.pl,a=>a.filter(x=>x!==e.src)),className:"text-fuchsia-400 hover:text-white px-1","aria-label":"Löschen"},"✕"))),
+   can(e)&&h("div",{className:"mt-2 flex flex-wrap gap-x-4 gap-y-1"},
+    h("button",{onClick:()=>setLs(e.pl,a=>a.map(x=>x===e.src?{...x,r:!x.r}:x)),className:"text-xs text-gray-300 hover:text-white underline decoration-dotted"},e.r?"Zurück auf Aktiv setzen":"Als wiederbelebt markieren 🔄"),
+    h("button",{onClick:()=>{setEl(el===id(e)?null:id(e));setEv(e.f)},className:"text-xs text-orange-300 hover:text-white underline decoration-dotted"},"Linie bearbeiten ✏️")),
+   can(e)&&el===id(e)&&h("div",{className:"mt-2 flex gap-2"},h("input",{value:ev,autoFocus:true,onChange:k=>setEv(k.target.value),onKeyDown:k=>k.key=="Enter"&&saveLine(e),placeholder:"z.B. Glumanda, Glutexo, Glurak",className:"flex-1 min-w-0 px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-orange-400/50 outline-none"}),h(Btn,{onClick:()=>saveLine(e)},"OK"))))):
+  h("div",{className:"card p-8 text-center text-gray-500"},all.length?"Keine Fänge in dieser Auswahl.":"Noch keine Encounter registriert."))}
+function EncTab(){
+ const[sc,setSc]=useState("solo");
+ const b=(k,t)=>h("button",{onClick:()=>setSc(k),className:"px-5 py-2 rounded-lg text-sm font-bold border "+(sc==k?"border-fuchsia-500 bg-fuchsia-500/20 text-white":"border-white/15 text-gray-400 hover:text-white")},t);
+ return h("div",null,h("div",{className:"flex gap-2 mt-6"},b("solo","Solo-Encounter"),b("duo","Duo-Encounter")),h(Encounters,{key:sc,scope:sc}))}
 
 const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
 const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const isP2=()=>getMode()=="duo"&&getPlayer()=="2";
 const wKey=()=>{try{return isP2()?(localStorage.getItem("gl_key_p2")||""):(API_KEY||localStorage.getItem("gl_key")||"")}catch(e){return isP2()?"":API_KEY}};
 const getMode=()=>LS("gl_mode","solo"),getPlayer=()=>String(LS("gl_player","1"));
-const ownKeys=()=>getMode()=="duo"?["gl_state_p"+getPlayer()]:["gl_state","gl_enc"];
-const ALLKEYS=["gl_state","gl_enc","gl_runs","gl_state_p1","gl_state_p2","gl_runs_duo"];
+const ownKeys=()=>getMode()=="duo"?["gl_state_p"+getPlayer(),"gl_enc_p"+getPlayer()]:["gl_state","gl_enc"];
+const ALLKEYS=["gl_state","gl_enc","gl_runs","gl_state_p1","gl_state_p2","gl_enc_p1","gl_enc_p2","gl_runs_duo"];
 const allRaw=()=>ALLKEYS.map(k=>localStorage.getItem(k)).join("|");
 // ---- JSONBin: Zuschauer lesen mit READ_KEY, Admin liest/schreibt mit eigenem Key (Master- oder Access-Key) ----
 async function jbFetch(method,body){
@@ -404,15 +413,15 @@ async function cloudPush(data){if(!isAdmin()||!wKey())throw new Error("Kein API-
 // Datenmodell v2: {solo:{state,enc,runs}, duo:{p1,p2,runs}} – altes Format {state,enc,runs} wird als Solo übernommen
 function normalize(d){d=d&&typeof d=="object"?d:{};
  const so=d.solo||{state:d.state||null,enc:d.enc||[],runs:d.runs||[]},du=d.duo||{};
- return{v:2,solo:{state:so.state||null,enc:so.enc||[],runs:so.runs||[]},duo:{p1:du.p1||null,p2:du.p2||null,runs:du.runs||[]},t:d.t}}
+ return{v:2,solo:{state:so.state||null,enc:so.enc||[],runs:so.runs||[]},duo:{p1:du.p1||null,p2:du.p2||null,e1:du.e1||[],e2:du.e2||[],runs:du.runs||[]},t:d.t}}
 // Lesen-ändern-schreiben: so überschreibt jeder Spieler nur seinen eigenen Teil
 async function cloudUpdate(mut){const d=normalize(await cloudPull());mut(d);d.t=Date.now();await cloudPush(d);return d}
 async function pushOwn(){const m=getMode(),p=getPlayer();
- await cloudUpdate(d=>{if(m=="duo")d.duo["p"+p]=LS("gl_state_p"+p,init());else{d.solo.state=LS("gl_state",init());d.solo.enc=LS("gl_enc",[])}})}
+ await cloudUpdate(d=>{if(m=="duo"){d.duo["p"+p]=LS("gl_state_p"+p,init());d.duo["e"+p]=LS("gl_enc_p"+p,[])}else{d.solo.state=LS("gl_state",init());d.solo.enc=LS("gl_enc",[])}})}
 function applyCloud(d,skip){skip=skip||[];d=normalize(d);
  const put=(k,v)=>{if(!skip.includes(k)&&v!=null)SV(k,v)};
  put("gl_state",d.solo.state);put("gl_enc",d.solo.enc);put("gl_runs",d.solo.runs);
- put("gl_state_p1",d.duo.p1);put("gl_state_p2",d.duo.p2);put("gl_runs_duo",d.duo.runs)}
+ put("gl_state_p1",d.duo.p1);put("gl_state_p2",d.duo.p2);put("gl_enc_p1",d.duo.e1);put("gl_enc_p2",d.duo.e2);put("gl_runs_duo",d.duo.runs)}
 // ---- Archiv ----
 const slice=st=>G.map((_,i)=>{const x=(st&&st[i])||{team:[],ch:[],dt:"",box:"",s:0},kk=t=>t.trim().toLowerCase();
  const dead=[...dl(x),...(x.ch||[]).filter(c=>c.n.trim()&&!c.a).map(c=>c.n.trim())],seen=new Set(),dd=[],al=[];
@@ -429,32 +438,15 @@ async function archiveRun(){
    if(!Array.isArray(d.duo.p1)&&!Array.isArray(d.duo.p2))throw new Error("Kein Duo-Stand vorhanden");
    const a=slice(d.duo.p1),b=slice(d.duo.p2),gens=G.map((_,i)=>({p1:a[i],p2:b[i]}));
    let end=0;gens.forEach((x,i)=>{if(hasData(x.p1)||hasData(x.p2))end=i});
-   d.duo.runs=[...d.duo.runs,{n:d.duo.runs.length+1,date,end,gens}];d.duo.p1=init();d.duo.p2=init()}
+   d.duo.runs=[...d.duo.runs,{n:d.duo.runs.length+1,date,end,gens}];d.duo.p1=init();d.duo.p2=init();d.duo.e1=[];d.duo.e2=[]}
   else{
    const st=LS("gl_state",null);if(!st)throw new Error("Kein aktueller Stand vorhanden");
    const gens=slice(st);let end=0;gens.forEach((x,i)=>{if(hasData(x))end=i});
    d.solo.runs=[...d.solo.runs,{n:d.solo.runs.length+1,date,end,gens}];d.solo.state=init();d.solo.enc=[]}});
- if(m=="duo"){SV("gl_state_p1",d.duo.p1);SV("gl_state_p2",d.duo.p2);SV("gl_runs_duo",d.duo.runs)}
+ if(m=="duo"){SV("gl_state_p1",d.duo.p1);SV("gl_state_p2",d.duo.p2);SV("gl_enc_p1",[]);SV("gl_enc_p2",[]);SV("gl_runs_duo",d.duo.runs)}
  else{SV("gl_state",d.solo.state);SV("gl_enc",[]);SV("gl_runs",d.solo.runs)}
  try{localStorage.removeItem("gl_dirty")}catch(e){}}
-// ---- Pokélink (Socket.io, lokal) ----
-function findParty(p){if(!p)return null;
- if(Array.isArray(p)){if(p.length&&p[0]&&(p[0].pokemon||p[0].species||p[0].speciesName))return p;if(p.length&&p[0]&&p[0].party)return p[0].party;return null}
- return(p.update&&p.update.party)||p.party||(p.players&&p.players[0]&&p.players[0].party)||null}
-function monName(e){const p=(e&&e.pokemon)||e||{};if(p.isEgg||(e&&e.isEgg))return null;const sp=p.species;
- const n=typeof sp=="string"?sp:(sp&&typeof sp=="object")?(sp.name||(sp.names&&(sp.names.de||sp.names.en))||sp.identifier):(p.speciesName||p.name||null);
- return typeof n=="string"&&n?n:null}
-const toDE=n=>{const k=K(n);if(pokemonTranslations[k])return n;const d=EN2DE[k];return d?d.charAt(0).toUpperCase()+d.slice(1):n};
-function applyParty(payload,sk){
- const party=findParty(payload);if(!party)return"Event ohne erkennbare Party (siehe Diagnose)";
- const names=party.map(monName).filter(Boolean).slice(0,6).map(toDE);
- if(!names.length)return"keine Pokémon-Namen im Event erkannt (siehe Diagnose)";
- const st=LS(sk,null)||init(),cur=st.findIndex(x=>x.s==1);if(cur<0)return"keine laufende Gen eingestellt";
- const team=[...names,...Array(6).fill("")].slice(0,6);
- if(JSON.stringify(st[cur].team)===JSON.stringify(team))return null;
- st[cur].team=team;SV(sk,st);try{localStorage.setItem("gl_dirty","1")}catch(e){}return true}
-
-function AdminBar({onLogin,onRefresh,mode,player,setMode,setPlayer,pl,plOn,setPlOn,plRaw}){
+function AdminBar({onLogin,onRefresh,mode,player,setMode,setPlayer}){
  const[pw,setPw]=useState(""),[key,setKey]=useState(""),[ok,setOk]=useState(isAdmin()),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[,tick]=useState(0),[k2,setK2]=useState(()=>{try{return localStorage.getItem("gl_key_p2")||""}catch(e){return ""}}),[k1,setK1]=useState("");
  const busyRef=React.useRef(false),nextTry=React.useRef(0);
  React.useEffect(()=>{const t=setInterval(async()=>{tick(x=>x+1);
@@ -463,7 +455,7 @@ function AdminBar({onLogin,onRefresh,mode,player,setMode,setPlayer,pl,plOn,setPl
   busyRef.current=true;const raw=()=>JSON.stringify(ownKeys().map(k=>LS(k,null))),before=raw();
   try{await pushOwn();if(raw()===before)localStorage.removeItem("gl_dirty");setMsg("☁️ Automatisch hochgeladen "+new Date().toLocaleTimeString("de-DE"))}
   catch(e){nextTry.current=Date.now()+30000;setMsg("✗ Auto-Upload fehlgeschlagen: "+e.message+" – neuer Versuch in 30 s")}
-  busyRef.current=false},3000);return()=>clearInterval(t)},[]);
+  busyRef.current=false},1500);return()=>clearInterval(t)},[]);
  const login=()=>{
   if(pw!==ADMIN_PASSWORD){setMsg("Falsches Passwort.");return}
   try{sessionStorage.setItem("gl_auth","1");if(key.trim())localStorage.setItem("gl_key",key.trim())}catch(e){}
@@ -492,8 +484,7 @@ function AdminBar({onLogin,onRefresh,mode,player,setMode,setPlayer,pl,plOn,setPl
   !(mode=="duo"&&player=="2")&&!wKey()&&h("div",{className:"grid gap-1"},
    h("label",{className:"text-xs tracking-widest text-violet-300"},"JSONBin Key (Solo / Spieler 1)"),
    h("input",{type:"password",value:k1,onChange:e=>{setK1(e.target.value);try{localStorage.setItem("gl_key",e.target.value.trim())}catch(x){}},placeholder:"Master- oder Access-Key",className:"px-3 py-2 rounded-lg bg-white/5 border border-white/15 outline-none focus:border-violet-500"})),
-  h("div",{className:"flex flex-wrap items-center gap-3 text-sm"},h("label",{className:"flex items-center gap-2 cursor-pointer"},h("input",{type:"checkbox",checked:plOn,onChange:e=>setPlOn(e.target.checked)}),"Pokélink verwenden"),h("span",{className:"text-gray-400"},pl)),
-  plRaw&&h("details",{className:"text-xs text-gray-500"},h("summary",{className:"cursor-pointer"},"Pokélink-Diagnose (letztes Event)"),h("pre",{className:"whitespace-pre-wrap break-all mt-1"},plRaw)))}
+  null)}
 
 function PlayerCol(st,n){
  const hd=h("div",{className:"text-xs tracking-[.25em] font-bold "+(n==1?"text-violet-400":"text-fuchsia-400")},"SPIELER "+n);
@@ -535,7 +526,7 @@ function Runs(){
   :h("div",{className:"card p-8 text-center text-gray-500"},duo?"Noch keine archivierten Duo-Runs.":"Noch keine archivierten Solo-Runs."))}
 
 function App(){
- const[tab,setTab]=useState(0),[open,setOpen]=useState(null),[ver,setVer]=useState(0),[auth,setAuth]=useState(isAdmin()),[st,setSt]=useState("⏳ Lade Live-Daten …"),[mode,setModeS]=useState(getMode()),[player,setPlayerS]=useState(getPlayer()),[plOn,setPlOn]=useState(true),[pl,setPl]=useState("⚪ Pokélink: aus"),[plRaw,setPlRaw]=useState("");
+ const[tab,setTab]=useState(0),[open,setOpen]=useState(null),[ver,setVer]=useState(0),[auth,setAuth]=useState(isAdmin()),[st,setSt]=useState("⏳ Lade Live-Daten …"),[mode,setModeS]=useState(getMode()),[player,setPlayerS]=useState(getPlayer());
  const setMode=m=>{SV("gl_mode",m);setModeS(m)},setPlayer=p=>{SV("gl_player",p);setPlayerS(p)};
  React.useEffect(()=>{let on=true;
   const load=async()=>{try{const d=await cloudPull();if(!on)return;
@@ -548,24 +539,15 @@ function App(){
    catch(e){console.error("JSONBin GET:",e);if(on){const m=String(e.message||e);setSt("⚪ Cloud nicht erreichbar ("+m+") – zeige lokale Daten"+(m.includes("401")?" · Bin ist privat: READ_KEY (Lese-Access-Key) fehlt oder ist ungültig":m.includes("404")?" · BIN_ID falsch?":m.includes("fetch")?" · Netzwerk/Blocker/CORS":""))}}};
   load();const t=setInterval(load,30000);
   return()=>{on=false;clearInterval(t)}},[auth,mode,player]);
- React.useEffect(()=>{
-  if(!auth||!plOn){setPl("⚪ Pokélink: aus");return}
-  if(typeof io!=="function"){setPl("⚪ Pokélink: Client nicht geladen");return}
-  let sock;try{sock=io("http://localhost:3000/",{transports:["websocket"],reconnectionDelay:5000,reconnectionDelayMax:15000,timeout:4000})}catch(e){setPl("⚪ Pokélink: Verbindung nicht möglich");return}
-  const sk=getMode()=="duo"?"gl_state_p"+getPlayer():"gl_state";
-  const onEv=p=>{try{const r=applyParty(p,sk);if(r===true){setVer(v=>v+1);setPl("🟢 Pokélink: Team aktualisiert "+new Date().toLocaleTimeString("de-DE"))}else if(typeof r=="string")setPl("🟠 Pokélink: "+r)}catch(e){console.warn("Pokélink:",e)}};
-  sock.on("connect",()=>setPl("🟢 Pokélink verbunden"));sock.on("disconnect",()=>setPl("⚪ Pokélink getrennt"));sock.on("connect_error",()=>setPl("⚪ Pokélink nicht gestartet (localhost:3000)"));
-  ["client:party:updated","party","client:players:list"].forEach(ev=>sock.on(ev,onEv));
-  if(sock.onAny)sock.onAny((ev,...a)=>{try{setPlRaw(ev+": "+JSON.stringify(a).slice(0,400))}catch(e){}});
-  return()=>{try{sock.close()}catch(e){}}},[auth,plOn,mode,player]);
  return h("div",{className:"max-w-5xl mx-auto px-4 pb-16"},
-  ADMIN_URL&&h(AdminBar,{onLogin:()=>setAuth(true),onRefresh:()=>setVer(v=>v+1),mode,player,setMode,setPlayer,pl,plOn,setPlOn,plRaw}),
+  h("datalist",{id:"pkmn"},NAMES.map(n=>h("option",{key:n,value:n}))),
+  ADMIN_URL&&h(AdminBar,{onLogin:()=>setAuth(true),onRefresh:()=>setVer(v=>v+1),mode,player,setMode,setPlayer}),
   h("header",{className:"py-5 flex flex-wrap items-center gap-4 justify-between"},
    h("div",{className:"text-lg font-bold tracking-widest bg-gradient-to-r from-violet-400 via-blue-400 to-fuchsia-500 bg-clip-text text-transparent"},"GENLOCKE//CHALLENGE"),
    h("nav",{className:"flex gap-1 overflow-x-auto"},ORDER.map(i=>{const t=TABS[i];return(i==3&&!isAdmin())?null:h("button",{key:t,onClick:()=>setTab(i),
     className:"px-4 py-2 rounded-full text-sm whitespace-nowrap border "+(tab==i?"border-violet-500 text-white bg-violet-500/20 shadow-[0_0_14px_rgba(139,92,246,.5)]":"border-white/10 text-gray-400 hover:text-white")},t)}))),
   h("div",{className:"text-xs text-gray-500 -mt-3 mb-2"},st),
-  tab==1?h(Stand,{key:ver+"s",sk:"gl_state",canEdit:isAdmin()&&mode=="solo",title:"Der Stand der Challenge · Solo-Run"}):tab==6?h("div",{key:ver},h(DuoView),isAdmin()&&mode=="duo"&&h(Stand,{key:"d"+player,sk:"gl_state_p"+player,canEdit:true,title:"Mein Bereich · Spieler "+player})):tab==4?h(Encounters,{key:ver}):tab==2?h(Graveyard,{key:ver}):tab==5?h(Runs,{key:ver}):tab==3&&isAdmin()?h(Wheels):tab>0?h("div",{className:"card p-12 text-center text-gray-400 mt-8"},TABS[tab]+" – kommt bald."):
+  tab==1?h(Stand,{key:ver+"s",sk:"gl_state",canEdit:isAdmin()&&mode=="solo",title:"Der Stand der Challenge · Solo-Run"}):tab==6?h("div",{key:ver},h(DuoView),isAdmin()&&mode=="duo"&&h(Stand,{key:"d"+player,sk:"gl_state_p"+player,canEdit:true,title:"Mein Bereich · Spieler "+player})):tab==4?h(EncTab,{key:ver}):tab==2?h(Graveyard,{key:ver}):tab==5?h(Runs,{key:ver}):tab==3&&isAdmin()?h(Wheels):tab>0?h("div",{className:"card p-12 text-center text-gray-400 mt-8"},TABS[tab]+" – kommt bald."):
   h("main",null,
    h("h2",{className:"text-3xl font-bold mt-6 mb-1"},"Die Regeln"),
    h("p",{className:"text-gray-500 mb-5"},"Sieben Regionen. Keine Gnade."),
