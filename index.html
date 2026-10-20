@@ -20,7 +20,7 @@ const h=React.createElement,{useState}=React;
 // ===== CLOUD-KONFIGURATION (JSONBin.io) =====
 const BIN_ID="6ac66905ac6210605a1cd1a4";
 const API_KEY="";   // Schreib-Key. Bewusst leer: wird im Admin-Login eingegeben (siehe Hinweis). Nie in eine öffentliche Seite schreiben!
-const READ_KEY="";  // Optional: Access-Key mit NUR Lese-Recht, falls der Bin privat ist
+const READ_KEY="$2a$10$2zw0e3/2ju5jliU0mFiNV.wqIw9Vi2.hPk9ECpglqpPOMuPdDl25a";  // Optional: Access-Key mit NUR Lese-Recht, falls der Bin privat ist
 const ADMIN_PASSWORD="admin123";
 const ADMIN_URL=new URLSearchParams(location.search).get("admin")=="true";
 const isAdmin=()=>{try{return ADMIN_URL&&sessionStorage.getItem("gl_auth")=="1"}catch(e){return false}};
@@ -382,9 +382,9 @@ const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?
 const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const wKey=()=>{try{return API_KEY||localStorage.getItem("gl_key")||""}catch(e){return API_KEY}};
 async function cloudPull(){
- const hd={"X-Bin-Meta":"false"};
+ const hd={};
  if(isAdmin()&&wKey())hd["X-Master-Key"]=wKey();else if(READ_KEY)hd["X-Access-Key"]=READ_KEY;
- const r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:hd});
+ const r=await fetch("https://api.jsonbin.io/v3/b/"+BIN_ID+"/latest",{headers:hd,cache:"no-store"});
  if(!r.ok)throw new Error("HTTP "+r.status);
  const j=await r.json();return j.record||j}
 async function cloudPush(data){
@@ -460,7 +460,7 @@ function App(){
     if(ADMIN_URL&&localStorage.getItem("gl_dirty")){setSt("🟠 Admin: lokale, noch nicht hochgeladene Änderungen");return}
     if(ADMIN_URL&&isAdmin()&&!Array.isArray(d.state)&&LS("gl_state",null)){localStorage.setItem("gl_dirty","1");setSt("🟠 Cloud ist noch leer – Erst-Upload läuft …");return}
     applyCloud(d);setVer(v=>v+1);setSt("🟢 Live · "+new Date().toLocaleTimeString("de-DE"))}
-   catch(e){if(on)setSt("⚪ Cloud nicht erreichbar – zeige lokale Daten")}};
+   catch(e){console.error("JSONBin GET:",e);if(on){const m=String(e.message||e);setSt("⚪ Cloud nicht erreichbar ("+m+") – zeige lokale Daten"+(m.includes("401")?" · Bin ist privat: READ_KEY (Lese-Access-Key) fehlt oder ist ungültig":m.includes("404")?" · BIN_ID falsch?":m.includes("fetch")?" · Netzwerk/Blocker/CORS":""))}}};
   load();const t=ADMIN_URL?null:setInterval(load,30000);
   return()=>{on=false;if(t)clearInterval(t)}},[auth]);
  return h("div",{className:"max-w-5xl mx-auto px-4 pb-16"},
