@@ -409,7 +409,14 @@ async function archiveRun(){
 
 function AdminBar({onLogin,onRefresh}){
  const[pw,setPw]=useState(""),[key,setKey]=useState(""),[ok,setOk]=useState(isAdmin()),[msg,setMsg]=useState(""),[busy,setBusy]=useState(false),[,tick]=useState(0);
- React.useEffect(()=>{const t=setInterval(()=>tick(x=>x+1),2000);return()=>clearInterval(t)},[]);
+const busyRef=React.useRef(false),nextTry=React.useRef(0);
+ React.useEffect(()=>{const t=setInterval(async()=>{tick(x=>x+1);
+  if(!isAdmin()||busyRef.current||Date.now()<nextTry.current)return;
+  if(!localStorage.getItem("gl_dirty")||!wKey())return;
+  busyRef.current=true;const raw=()=>JSON.stringify([LS("gl_state",null),LS("gl_enc",[]),LS("gl_runs",[])]),before=raw();
+  try{await cloudPush(snapshot());if(raw()===before)localStorage.removeItem("gl_dirty");setMsg("☁️ Automatisch hochgeladen "+new Date().toLocaleTimeString("de-DE"))}
+  catch(e){nextTry.current=Date.now()+30000;setMsg("✗ Auto-Upload fehlgeschlagen: "+e.message+" – neuer Versuch in 30 s")}
+  busyRef.current=false},3000);return()=>clearInterval(t)},[]);
  const login=()=>{
   if(pw!==ADMIN_PASSWORD){setMsg("Falsches Passwort.");return}
   if(!wKey()&&!key.trim()){setMsg("Bitte den JSONBin API-Key eingeben.");return}
@@ -451,6 +458,7 @@ function App(){
  React.useEffect(()=>{let on=true;
   const load=async()=>{try{const d=await cloudPull();if(!on)return;
     if(ADMIN_URL&&localStorage.getItem("gl_dirty")){setSt("🟠 Admin: lokale, noch nicht hochgeladene Änderungen");return}
+    if(ADMIN_URL&&isAdmin()&&!Array.isArray(d.state)&&LS("gl_state",null)){localStorage.setItem("gl_dirty","1");setSt("🟠 Cloud ist noch leer – Erst-Upload läuft …");return}
     applyCloud(d);setVer(v=>v+1);setSt("🟢 Live · "+new Date().toLocaleTimeString("de-DE"))}
    catch(e){if(on)setSt("⚪ Cloud nicht erreichbar – zeige lokale Daten")}};
   load();const t=ADMIN_URL?null:setInterval(load,30000);
